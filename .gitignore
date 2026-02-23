@@ -1,0 +1,19 @@
+node_modules/
+dist/
+
+# Local environment
+.env
+.env.*
+
+# Runtime data
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
