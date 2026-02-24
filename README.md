@@ -1,4 +1,13 @@
-# RSS MCP Incremental Server
+# RSS News MCP
+
+```text
+ ____  ____ ____    _   _                     __  __  ____ ____  
+|  _ \/ ___/ ___|  | \ | | _____      _____  |  \/  |/ ___|  _ \ 
+| |_) \___ \___ \  |  \| |/ _ \ \ /\ / / __| | |\/| | |   | |_) |
+|  _ < ___) |__) | | |\  |  __/\ V  V /\__ \ | |  | | |___|  __/ 
+|_| \_\____/____/  |_| \_|\___| \_/\_/ |___/ |_|  |_|\____|_|    
+                                                                
+```
 
 Node.js + TypeScript MCP server for RSS news ingestion with incremental delivery.
 
@@ -42,6 +51,26 @@ npm test
 
 ## MCP Tool
 
+### `update_news`
+
+Fetch configured feeds and update local `entries`/`feeds` state.
+
+Input:
+
+```json
+{
+  "feedUrls": ["https://example.com/rss.xml", "rsshub://deeplearning/the-batch"]
+}
+```
+
+Output:
+
+- `ok`: whether tool call completed
+- `resolvedFeedUrls`: actual feed list used by this call
+- `summary`: aggregate update stats (`feedsTotal`, `successFeeds`, `errorFeeds`, `fetchedTotal`, `insertedTotal`, `skipped304Feeds`)
+- `errors`: per-feed error list (`feedUrl`, `message`)
+- `updatedAt`: ISO timestamp
+
 ### `fetch_latest_news`
 
 Input:
@@ -51,16 +80,16 @@ Input:
   "feedUrls": ["https://example.com/rss.xml", "rsshub://deeplearning/the-batch"],
   "limit": 20,
   "sinceMinutes": 120,
-  "includeDelivered": false
+  "includeDelivered": false,
+  "markAsRead": true
 }
 ```
 
 Output:
 
 - `items`: globally latest news sorted by timestamp (across all selected feeds)
-- `meta`: per-feed fetch stats (`fetched`, `inserted`, `delivered`, `skipped304`, `error`)
-  - `meta[feedUrl].response.attemptedUrls` shows fallback attempts for `rsshub://` feeds
-- `includeDelivered`: when `true`, return all news in time window and do not mark deliveries
+- `includeDelivered`: when `true`, return all news in time window
+- `markAsRead`: when `false`, do not mark fetched undelivered items as read
 - `resolvedFeedUrls`: actual feed list used by this call
 - `limit`: global result limit (not per feed)
 
@@ -68,6 +97,8 @@ Notes:
 
 - `feedUrls` is now optional. If omitted, server uses all known RSS sources from the database.
 - Default mode is `includeDelivered: false` (only undelivered news).
+- Default mode is `markAsRead: true` (fetched undelivered items are marked read/delivered).
+- `fetch_latest_news` no longer pulls remote RSS by itself; call `update_news` first to refresh data.
 
 ### `get_news_count`
 
