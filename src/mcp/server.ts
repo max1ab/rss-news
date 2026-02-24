@@ -4,6 +4,7 @@ import type { AppConfig } from "../config.js"
 import { registerFetchLatestNewsTool } from "./tools/fetchLatestNews.js"
 import { registerGetNewsCountTool } from "./tools/getNewsCount.js"
 import { registerSetReadStatusByTimeRangeTool } from "./tools/setReadStatusByTimeRange.js"
+import { registerUpdateNewsTool } from "./tools/updateNews.js"
 import { NewsRepository } from "../store/repository.js"
 
 export function createServer(config: AppConfig) {
@@ -15,6 +16,10 @@ export function createServer(config: AppConfig) {
   const repository = new NewsRepository(config.dbPath)
 
   registerFetchLatestNewsTool(server, {
+    repository,
+    config,
+  })
+  registerUpdateNewsTool(server, {
     repository,
     config,
   })

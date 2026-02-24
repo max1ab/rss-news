@@ -42,6 +42,26 @@ npm test
 
 ## MCP Tool
 
+### `update_news`
+
+Fetch configured feeds and update local `entries`/`feeds` state.
+
+Input:
+
+```json
+{
+  "feedUrls": ["https://example.com/rss.xml", "rsshub://deeplearning/the-batch"]
+}
+```
+
+Output:
+
+- `ok`: whether tool call completed
+- `resolvedFeedUrls`: actual feed list used by this call
+- `summary`: aggregate update stats (`feedsTotal`, `successFeeds`, `errorFeeds`, `fetchedTotal`, `insertedTotal`, `skipped304Feeds`)
+- `errors`: per-feed error list (`feedUrl`, `message`)
+- `updatedAt`: ISO timestamp
+
 ### `fetch_latest_news`
 
 Input:
@@ -58,8 +78,6 @@ Input:
 Output:
 
 - `items`: globally latest news sorted by timestamp (across all selected feeds)
-- `meta`: per-feed fetch stats (`fetched`, `inserted`, `delivered`, `skipped304`, `error`)
-  - `meta[feedUrl].response.attemptedUrls` shows fallback attempts for `rsshub://` feeds
 - `includeDelivered`: when `true`, return all news in time window and do not mark deliveries
 - `resolvedFeedUrls`: actual feed list used by this call
 - `limit`: global result limit (not per feed)
@@ -68,6 +86,7 @@ Notes:
 
 - `feedUrls` is now optional. If omitted, server uses all known RSS sources from the database.
 - Default mode is `includeDelivered: false` (only undelivered news).
+- `fetch_latest_news` no longer pulls remote RSS by itself; call `update_news` first to refresh data.
 
 ### `get_news_count`
 
