@@ -9,7 +9,7 @@ import { NewsRepository } from "../store/repository.js"
 
 export function createServer(config: AppConfig) {
   const server = new McpServer({
-    name: "rss-mcp-incremental-server",
+    name: "rss-news-mcp",
     version: "0.1.0",
   })
 

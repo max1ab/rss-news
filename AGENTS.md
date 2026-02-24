@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Agent guidance for `rss-mcp-server`.
+Agent guidance for `rss-news-mcp`.
 
 ## Project scope
 
