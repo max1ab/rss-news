@@ -49,16 +49,65 @@ Input:
 ```json
 {
   "feedUrls": ["https://example.com/rss.xml", "rsshub://deeplearning/the-batch"],
-  "limitPerFeed": 20,
-  "sinceMinutes": 120
+  "limit": 20,
+  "sinceMinutes": 120,
+  "includeDelivered": false
 }
 ```
 
 Output:
 
-- `items`: undelivered news sorted by latest timestamp
+- `items`: globally latest news sorted by timestamp (across all selected feeds)
 - `meta`: per-feed fetch stats (`fetched`, `inserted`, `delivered`, `skipped304`, `error`)
   - `meta[feedUrl].response.attemptedUrls` shows fallback attempts for `rsshub://` feeds
+- `includeDelivered`: when `true`, return all news in time window and do not mark deliveries
+- `resolvedFeedUrls`: actual feed list used by this call
+- `limit`: global result limit (not per feed)
+
+Notes:
+
+- `feedUrls` is now optional. If omitted, server uses all known RSS sources from the database.
+- Default mode is `includeDelivered: false` (only undelivered news).
+
+### `get_news_count`
+
+Count news in the past N hours.
+
+Input:
+
+```json
+{
+  "pastHours": 24,
+  "includeDelivered": false,
+  "feedUrls": ["https://example.com/rss.xml"]
+}
+```
+
+Output fields:
+
+- `countType`: `undelivered` or `all`
+- `totalCount`: summed count
+- `countsByFeed`: per-feed count map
+
+### `set_read_status_by_time_range`
+
+Set read/unread status in a date range.
+
+Input:
+
+```json
+{
+  "startDate": "2026-02-20",
+  "endDate": "2026-02-23",
+  "status": "read",
+  "feedUrls": ["https://example.com/rss.xml"]
+}
+```
+
+Behavior:
+
+- `status: "read"`: mark matched entries as read (insert into `deliveries`)
+- `status: "unread"`: mark matched entries as unread (delete from `deliveries`)
 
 ## Cursor MCP Config Example
 

@@ -7,9 +7,10 @@ import { normalizeFeedItems } from "../../rss/normalize.js"
 import type { NewsRepository } from "../../store/repository.js"
 
 const fetchLatestNewsInput = z.object({
-  feedUrls: z.array(z.string().url()).min(1).max(500),
-  limitPerFeed: z.number().int().min(1).max(200).optional(),
+  feedUrls: z.array(z.string().url()).max(500).optional(),
+  limit: z.number().int().min(1).max(500).optional(),
   sinceMinutes: z.number().int().min(1).max(60 * 24 * 30).optional(),
+  includeDelivered: z.boolean().optional(),
 })
 
 type FeedMeta = {
@@ -54,13 +55,15 @@ export function registerFetchLatestNewsTool(server: McpServer, deps: {
         )
       }
 
-      if (input.feedUrls.length > deps.config.maxFeedUrlsPerRequest) {
+      const requestedFeedUrls = input.feedUrls ?? deps.repository.listKnownFeedUrls()
+      if (requestedFeedUrls.length > deps.config.maxFeedUrlsPerRequest) {
         throw new Error(
           `feedUrls exceed configured max: ${deps.config.maxFeedUrlsPerRequest}`,
         )
       }
 
-      const limitPerFeed = input.limitPerFeed ?? deps.config.defaultLimitPerFeed
+      const includeDelivered = input.includeDelivered === true
+      const totalLimit = input.limit ?? deps.config.defaultLimitPerFeed
       const sinceTimestamp =
         typeof input.sinceMinutes === "number"
           ? Date.now() - input.sinceMinutes * 60 * 1000
@@ -68,8 +71,8 @@ export function registerFetchLatestNewsTool(server: McpServer, deps: {
 
       const metaByFeed: Record<string, FeedMeta> = {}
 
-      const perFeedResults = await Promise.all(
-        input.feedUrls.map(async (feedUrl) => {
+      await Promise.all(
+        requestedFeedUrls.map(async (feedUrl) => {
           const now = Date.now()
           const feedMeta: FeedMeta = {
             fetched: 0,
@@ -111,40 +114,51 @@ export function registerFetchLatestNewsTool(server: McpServer, deps: {
               feedMeta.inserted = deps.repository.upsertEntries(feedUrl, normalizedEntries)
             }
 
-            const undelivered = deps.repository.listUndeliveredEntries({
-              feedUrl,
-              limit: limitPerFeed,
-              sinceTimestamp,
-            })
-
-            deps.repository.markDelivered(
-              feedUrl,
-              undelivered.map((entry) => entry.entryUid),
-              Date.now(),
-            )
-            feedMeta.delivered = undelivered.length
             debugLog("rss.feed.result", {
               feedUrl,
               fetched: feedMeta.fetched,
               inserted: feedMeta.inserted,
               delivered: feedMeta.delivered,
               skipped304: feedMeta.skipped304,
+              includeDelivered,
             })
-
-            return undelivered
           } catch (error) {
             feedMeta.error = error instanceof Error ? error.message : String(error)
             debugLog("rss.feed.error", {
               feedUrl,
               error: feedMeta.error,
             })
-            return []
           }
         }),
       )
 
-      const items = perFeedResults
-        .flat()
+      const entries = deps.repository.listEntriesAcrossFeeds({
+        feedUrls: requestedFeedUrls,
+        limit: totalLimit,
+        sinceTimestamp,
+        includeDelivered,
+      })
+
+      if (!includeDelivered) {
+        const deliveredByFeed = new Map<string, string[]>()
+        for (const entry of entries) {
+          const list = deliveredByFeed.get(entry.feedUrl)
+          if (list) {
+            list.push(entry.entryUid)
+          } else {
+            deliveredByFeed.set(entry.feedUrl, [entry.entryUid])
+          }
+        }
+
+        for (const [feedUrl, entryUids] of deliveredByFeed) {
+          deps.repository.markDelivered(feedUrl, entryUids, Date.now())
+          if (metaByFeed[feedUrl]) {
+            metaByFeed[feedUrl]!.delivered = entryUids.length
+          }
+        }
+      }
+
+      const items = entries
         .sort((a, b) => {
           const aTime = a.publishedAt ?? a.firstSeenAt
           const bTime = b.publishedAt ?? b.firstSeenAt
@@ -167,6 +181,9 @@ export function registerFetchLatestNewsTool(server: McpServer, deps: {
               {
                 items,
                 meta: metaByFeed,
+                includeDelivered,
+                resolvedFeedUrls: requestedFeedUrls,
+                limit: totalLimit,
               },
               null,
               2,

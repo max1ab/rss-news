@@ -23,6 +23,16 @@ export interface StoredEntry {
   firstSeenAt: number
 }
 
+export interface NewsCountResult {
+  total: number
+  byFeed: Record<string, number>
+}
+
+export interface MarkReadRangeResult {
+  matchedEntries: number
+  changedDeliveries: number
+}
+
 export class NewsRepository {
   private readonly db: Database.Database
 
@@ -116,15 +126,36 @@ export class NewsRepository {
     return inserted
   }
 
-  listUndeliveredEntries({
+  listKnownFeedUrls(): string[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT DISTINCT feed_url FROM (
+          SELECT feed_url FROM feeds
+          UNION
+          SELECT feed_url FROM entries
+        )
+        WHERE feed_url IS NOT NULL AND feed_url != ''
+        ORDER BY feed_url
+      `,
+      )
+      .all() as Array<{ feed_url: string }>
+
+    return rows.map((row) => row.feed_url)
+  }
+
+  listEntries({
     feedUrl,
     limit,
     sinceTimestamp,
+    includeDelivered = false,
   }: {
     feedUrl: string
     limit: number
     sinceTimestamp?: number
+    includeDelivered?: boolean
   }): StoredEntry[] {
+    const undeliveredClause = includeDelivered ? "" : "AND d.entry_uid IS NULL"
     const rows = this.db
       .prepare(
         `
@@ -142,7 +173,7 @@ export class NewsRepository {
           ON d.feed_url = e.feed_url
          AND d.entry_uid = e.entry_uid
         WHERE e.feed_url = ?
-          AND d.entry_uid IS NULL
+          ${undeliveredClause}
           AND (? IS NULL OR COALESCE(e.published_at, e.first_seen_at) >= ?)
         ORDER BY COALESCE(e.published_at, e.first_seen_at) DESC
         LIMIT ?
@@ -171,6 +202,75 @@ export class NewsRepository {
     }))
   }
 
+  listEntriesAcrossFeeds({
+    feedUrls,
+    limit,
+    sinceTimestamp,
+    includeDelivered = false,
+  }: {
+    feedUrls?: string[]
+    limit: number
+    sinceTimestamp?: number
+    includeDelivered?: boolean
+  }): StoredEntry[] {
+    const nextFeedUrls = (feedUrls ?? []).filter((url) => url.trim().length > 0)
+    const hasFeedFilter = nextFeedUrls.length > 0
+    const feedPlaceholders = hasFeedFilter ? nextFeedUrls.map(() => "?").join(", ") : ""
+    const whereFeedClause = hasFeedFilter ? `AND e.feed_url IN (${feedPlaceholders})` : ""
+    const undeliveredClause = includeDelivered ? "" : "AND d.entry_uid IS NULL"
+    const sql = `
+      SELECT
+        e.id,
+        e.feed_url,
+        e.entry_uid,
+        e.title,
+        e.link,
+        e.published_at,
+        e.content_snippet,
+        e.first_seen_at
+      FROM entries e
+      LEFT JOIN deliveries d
+        ON d.feed_url = e.feed_url
+       AND d.entry_uid = e.entry_uid
+      WHERE (? IS NULL OR COALESCE(e.published_at, e.first_seen_at) >= ?)
+        ${whereFeedClause}
+        ${undeliveredClause}
+      ORDER BY COALESCE(e.published_at, e.first_seen_at) DESC
+      LIMIT ?
+    `
+    const params = hasFeedFilter
+      ? [sinceTimestamp ?? null, sinceTimestamp ?? null, ...nextFeedUrls, limit]
+      : [sinceTimestamp ?? null, sinceTimestamp ?? null, limit]
+    const rows = this.db.prepare(sql).all(...params) as Array<{
+      id: string
+      feed_url: string
+      entry_uid: string
+      title: string
+      link: string | null
+      published_at: number | null
+      content_snippet: string | null
+      first_seen_at: number
+    }>
+
+    return rows.map((row) => ({
+      id: row.id,
+      feedUrl: row.feed_url,
+      entryUid: row.entry_uid,
+      title: row.title,
+      link: row.link,
+      publishedAt: row.published_at,
+      contentSnippet: row.content_snippet,
+      firstSeenAt: row.first_seen_at,
+    }))
+  }
+
+  listUndeliveredEntries(args: { feedUrl: string; limit: number; sinceTimestamp?: number }) {
+    return this.listEntries({
+      ...args,
+      includeDelivered: false,
+    })
+  }
+
   markDelivered(feedUrl: string, entryUids: string[], deliveredAt: number) {
     if (entryUids.length === 0) return
     const insert = this.db.prepare(
@@ -186,6 +286,137 @@ export class NewsRepository {
       }
     })
     tx()
+  }
+
+  countNewsSince({
+    sinceTimestamp,
+    includeDelivered,
+    feedUrls,
+  }: {
+    sinceTimestamp: number
+    includeDelivered: boolean
+    feedUrls?: string[]
+  }): NewsCountResult {
+    const nextFeedUrls = (feedUrls ?? []).filter((url) => url.trim().length > 0)
+    const hasFeedFilter = nextFeedUrls.length > 0
+    const feedPlaceholders = hasFeedFilter ? nextFeedUrls.map(() => "?").join(", ") : ""
+
+    const whereFeedClause = hasFeedFilter ? `AND e.feed_url IN (${feedPlaceholders})` : ""
+    const undeliveredClause = includeDelivered ? "" : "AND d.entry_uid IS NULL"
+
+    const sql = `
+      SELECT e.feed_url AS feed_url, COUNT(*) AS count
+      FROM entries e
+      LEFT JOIN deliveries d
+        ON d.feed_url = e.feed_url
+       AND d.entry_uid = e.entry_uid
+      WHERE COALESCE(e.published_at, e.first_seen_at) >= ?
+        ${whereFeedClause}
+        ${undeliveredClause}
+      GROUP BY e.feed_url
+    `
+
+    const params = hasFeedFilter
+      ? [sinceTimestamp, ...nextFeedUrls]
+      : [sinceTimestamp]
+
+    const rows = this.db.prepare(sql).all(...params) as Array<{
+      feed_url: string
+      count: number
+    }>
+
+    const byFeed: Record<string, number> = {}
+    let total = 0
+    for (const row of rows) {
+      byFeed[row.feed_url] = row.count
+      total += row.count
+    }
+
+    return {
+      total,
+      byFeed,
+    }
+  }
+
+  setReadStatusByTimeRange({
+    startTimestamp,
+    endTimestamp,
+    status,
+    feedUrls,
+  }: {
+    startTimestamp: number
+    endTimestamp: number
+    status: "read" | "unread"
+    feedUrls?: string[]
+  }): MarkReadRangeResult {
+    const nextFeedUrls = (feedUrls ?? []).filter((url) => url.trim().length > 0)
+    const hasFeedFilter = nextFeedUrls.length > 0
+    const feedPlaceholders = hasFeedFilter ? nextFeedUrls.map(() => "?").join(", ") : ""
+    const feedClause = hasFeedFilter ? `AND e.feed_url IN (${feedPlaceholders})` : ""
+    const whereSql = `
+      WHERE COALESCE(e.published_at, e.first_seen_at) >= ?
+        AND COALESCE(e.published_at, e.first_seen_at) < ?
+        ${feedClause}
+    `
+    const params = hasFeedFilter
+      ? [startTimestamp, endTimestamp, ...nextFeedUrls]
+      : [startTimestamp, endTimestamp]
+
+    const matchedEntries =
+      (
+        this.db
+          .prepare(
+            `
+          SELECT COUNT(*) AS count
+          FROM entries e
+          ${whereSql}
+        `,
+          )
+          .get(...params) as { count: number } | undefined
+      )?.count ?? 0
+
+    if (matchedEntries === 0) {
+      return { matchedEntries: 0, changedDeliveries: 0 }
+    }
+
+    if (status === "read") {
+      const insertSql = `
+        INSERT OR IGNORE INTO deliveries (id, feed_url, entry_uid, delivered_at)
+        SELECT lower(hex(randomblob(16))), e.feed_url, e.entry_uid, ?
+        FROM entries e
+        ${whereSql}
+      `
+      const insertParams = hasFeedFilter
+        ? [Date.now(), startTimestamp, endTimestamp, ...nextFeedUrls]
+        : [Date.now(), startTimestamp, endTimestamp]
+      const res = this.db.prepare(insertSql).run(...insertParams)
+      return {
+        matchedEntries,
+        changedDeliveries: res.changes,
+      }
+    }
+
+    const deleteSql = `
+      DELETE FROM deliveries
+      WHERE EXISTS (
+        SELECT 1
+        FROM entries e
+        WHERE e.feed_url = deliveries.feed_url
+          AND e.entry_uid = deliveries.entry_uid
+          AND COALESCE(e.published_at, e.first_seen_at) >= ?
+          AND COALESCE(e.published_at, e.first_seen_at) < ?
+          ${hasFeedFilter ? `AND e.feed_url IN (${feedPlaceholders})` : ""}
+      )
+    `
+    const deleteParams = hasFeedFilter
+      ? [startTimestamp, endTimestamp, ...nextFeedUrls]
+      : [startTimestamp, endTimestamp]
+    const res = this.db.prepare(deleteSql).run(...deleteParams)
+
+    return {
+      matchedEntries,
+      changedDeliveries: res.changes,
+    }
   }
 
   close() {
