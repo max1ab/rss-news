@@ -1,4 +1,13 @@
-# RSS MCP Incremental Server
+# RSS News MCP
+
+```text
+ ____  ____ ____    _   _                     __  __  ____ ____  
+|  _ \/ ___/ ___|  | \ | | _____      _____  |  \/  |/ ___|  _ \ 
+| |_) \___ \___ \  |  \| |/ _ \ \ /\ / / __| | |\/| | |   | |_) |
+|  _ < ___) |__) | | |\  |  __/\ V  V /\__ \ | |  | | |___|  __/ 
+|_| \_\____/____/  |_| \_|\___| \_/\_/ |___/ |_|  |_|\____|_|    
+                                                                
+```
 
 Node.js + TypeScript MCP server for RSS news ingestion with incremental delivery.
 
