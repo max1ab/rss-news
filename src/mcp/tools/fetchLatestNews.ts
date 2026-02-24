@@ -22,7 +22,7 @@ export function registerFetchLatestNewsTool(server: McpServer, deps: {
 
   server.tool(
     "fetch_latest_news",
-    "Fetch latest undelivered RSS news items.",
+    "Read latest RSS news from local storage and optionally mark as delivered.",
     fetchLatestNewsInput.shape,
     async (input) => {
       const requestedFeedUrls = input.feedUrls ?? deps.repository.listKnownFeedUrls()
