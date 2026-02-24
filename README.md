@@ -80,14 +80,16 @@ Input:
   "feedUrls": ["https://example.com/rss.xml", "rsshub://deeplearning/the-batch"],
   "limit": 20,
   "sinceMinutes": 120,
-  "includeDelivered": false
+  "includeDelivered": false,
+  "markAsRead": true
 }
 ```
 
 Output:
 
 - `items`: globally latest news sorted by timestamp (across all selected feeds)
-- `includeDelivered`: when `true`, return all news in time window and do not mark deliveries
+- `includeDelivered`: when `true`, return all news in time window
+- `markAsRead`: when `false`, do not mark fetched undelivered items as read
 - `resolvedFeedUrls`: actual feed list used by this call
 - `limit`: global result limit (not per feed)
 
@@ -95,6 +97,7 @@ Notes:
 
 - `feedUrls` is now optional. If omitted, server uses all known RSS sources from the database.
 - Default mode is `includeDelivered: false` (only undelivered news).
+- Default mode is `markAsRead: true` (fetched undelivered items are marked read/delivered).
 - `fetch_latest_news` no longer pulls remote RSS by itself; call `update_news` first to refresh data.
 
 ### `get_news_count`

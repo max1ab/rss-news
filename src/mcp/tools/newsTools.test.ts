@@ -139,4 +139,77 @@ describe("MCP tools update_news + fetch_latest_news", () => {
 
     repo.close()
   })
+
+  it("does not mark as delivered when markAsRead is false", async () => {
+    const repo = createRepo()
+    const serverHarness = createToolServer()
+    const config = createConfig()
+    const feedUrl = "https://example.com/rss.xml"
+
+    registerUpdateNewsTool(serverHarness.server as any, {
+      repository: repo,
+      config,
+    })
+    registerFetchLatestNewsTool(serverHarness.server as any, {
+      repository: repo,
+      config,
+    })
+
+    vi.mocked(fetchRssFeed).mockResolvedValueOnce({
+      status: "ok",
+      etag: null,
+      lastModified: null,
+      items: [
+        {
+          title: "Keep Unread",
+          link: "https://example.com/news/keep-unread",
+          guid: "news-keep-unread",
+          isoDate: new Date().toISOString(),
+          contentSnippet: "snippet",
+        },
+      ],
+      response: {
+        url: feedUrl,
+        sourceUrl: feedUrl,
+        attemptedUrls: [feedUrl],
+        status: 200,
+        statusText: "OK",
+        contentType: "application/rss+xml",
+        contentLength: "100",
+        etag: null,
+        lastModified: null,
+        responsePreview: null,
+      },
+    })
+
+    await serverHarness.getHandler("update_news")({
+      feedUrls: [feedUrl],
+    })
+
+    const firstFetchResult = await serverHarness.getHandler("fetch_latest_news")({
+      feedUrls: [feedUrl],
+      includeDelivered: false,
+      markAsRead: false,
+      limit: 10,
+    })
+    const firstFetchPayload = JSON.parse(firstFetchResult.content[0]!.text) as {
+      items: Array<{ title: string }>
+      markAsRead: boolean
+    }
+    expect(firstFetchPayload.markAsRead).toBe(false)
+    expect(firstFetchPayload.items).toHaveLength(1)
+
+    const secondFetchResult = await serverHarness.getHandler("fetch_latest_news")({
+      feedUrls: [feedUrl],
+      includeDelivered: false,
+      markAsRead: false,
+      limit: 10,
+    })
+    const secondFetchPayload = JSON.parse(secondFetchResult.content[0]!.text) as {
+      items: Array<{ title: string }>
+    }
+    expect(secondFetchPayload.items).toHaveLength(1)
+
+    repo.close()
+  })
 })

@@ -9,6 +9,7 @@ const fetchLatestNewsInput = z.object({
   limit: z.number().int().min(1).max(500).optional(),
   sinceMinutes: z.number().int().min(1).max(60 * 24 * 30).optional(),
   includeDelivered: z.boolean().optional(),
+  markAsRead: z.boolean().optional(),
 })
 
 export function registerFetchLatestNewsTool(server: McpServer, deps: {
@@ -22,7 +23,7 @@ export function registerFetchLatestNewsTool(server: McpServer, deps: {
 
   server.tool(
     "fetch_latest_news",
-    "Read latest RSS news from local storage and optionally mark as delivered.",
+    "Read latest RSS news from local storage with optional read-marking control.",
     fetchLatestNewsInput.shape,
     async (input) => {
       const requestedFeedUrls = input.feedUrls ?? deps.repository.listKnownFeedUrls()
@@ -33,6 +34,7 @@ export function registerFetchLatestNewsTool(server: McpServer, deps: {
       }
 
       const includeDelivered = input.includeDelivered === true
+      const markAsRead = input.markAsRead !== false
       const totalLimit = input.limit ?? deps.config.defaultLimitPerFeed
       const sinceTimestamp =
         typeof input.sinceMinutes === "number"
@@ -46,7 +48,7 @@ export function registerFetchLatestNewsTool(server: McpServer, deps: {
         includeDelivered,
       })
 
-      if (!includeDelivered) {
+      if (!includeDelivered && markAsRead) {
         const deliveredByFeed = new Map<string, string[]>()
         for (const entry of entries) {
           const list = deliveredByFeed.get(entry.feedUrl)
@@ -85,6 +87,7 @@ export function registerFetchLatestNewsTool(server: McpServer, deps: {
               {
                 items,
                 includeDelivered,
+                markAsRead,
                 resolvedFeedUrls: requestedFeedUrls,
                 limit: totalLimit,
               },
