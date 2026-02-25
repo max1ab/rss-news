@@ -41,7 +41,7 @@ npm test
 
 ## Environment Variables
 
-- `RSS_MCP_DB_PATH`: SQLite path (default: `./data/rss-mcp.sqlite`)
+- `RSS_MCP_DB_PATH`: SQLite path (default: `<project-root>/data/rss.sqlite`)
 - `RSS_MCP_REQUEST_TIMEOUT_MS`: fetch timeout in milliseconds (default: `15000`)
 - `RSS_MCP_DEFAULT_LIMIT_PER_FEED`: default return limit per feed (default: `20`)
 - `RSS_MCP_MAX_FEEDS_PER_REQUEST`: max feed count for each call (default: `50`)
@@ -166,6 +166,7 @@ npm run build
 
 ## Incremental Delivery Model
 
+- Database file is created lazily on first repository usage if it does not exist.
 - `entries`: stores fetched entries (`feed_url + entry_uid` is unique)
 - `deliveries`: stores which entries were already returned to agent
 - Tool returns only entries not present in `deliveries`, then marks them delivered

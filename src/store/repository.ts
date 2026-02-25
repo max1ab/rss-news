@@ -34,14 +34,22 @@ export interface MarkReadRangeResult {
 }
 
 export class NewsRepository {
-  private readonly db: Database.Database
+  private readonly dbPath: string
+  private db: Database.Database | null = null
 
   constructor(dbPath: string) {
-    this.db = createDatabase(dbPath)
+    this.dbPath = dbPath
+  }
+
+  private getDb() {
+    if (!this.db) {
+      this.db = createDatabase(this.dbPath)
+    }
+    return this.db
   }
 
   getFeedState(feedUrl: string): FeedState | null {
-    const row = this.db
+    const row = this.getDb()
       .prepare(
         `
         SELECT feed_url, etag, last_modified, last_checked_at
@@ -79,7 +87,7 @@ export class NewsRepository {
     lastModified: string | null
     lastCheckedAt: number
   }) {
-    this.db
+    this.getDb()
       .prepare(
         `
         INSERT INTO feeds (feed_url, etag, last_modified, last_checked_at)
@@ -96,8 +104,9 @@ export class NewsRepository {
   upsertEntries(feedUrl: string, entries: NormalizedEntry[]) {
     if (entries.length === 0) return 0
 
+    const db = this.getDb()
     const now = Date.now()
-    const insert = this.db.prepare(
+    const insert = db.prepare(
       `
       INSERT OR IGNORE INTO entries
       (id, feed_url, entry_uid, title, link, published_at, content_snippet, first_seen_at)
@@ -106,7 +115,7 @@ export class NewsRepository {
     )
 
     let inserted = 0
-    const tx = this.db.transaction(() => {
+    const tx = db.transaction(() => {
       for (const entry of entries) {
         const result = insert.run(
           entry.id,
@@ -127,7 +136,7 @@ export class NewsRepository {
   }
 
   listKnownFeedUrls(): string[] {
-    const rows = this.db
+    const rows = this.getDb()
       .prepare(
         `
         SELECT DISTINCT feed_url FROM (
@@ -156,7 +165,7 @@ export class NewsRepository {
     includeDelivered?: boolean
   }): StoredEntry[] {
     const undeliveredClause = includeDelivered ? "" : "AND d.entry_uid IS NULL"
-    const rows = this.db
+    const rows = this.getDb()
       .prepare(
         `
         SELECT
@@ -213,6 +222,7 @@ export class NewsRepository {
     sinceTimestamp?: number
     includeDelivered?: boolean
   }): StoredEntry[] {
+    const db = this.getDb()
     const nextFeedUrls = (feedUrls ?? []).filter((url) => url.trim().length > 0)
     const hasFeedFilter = nextFeedUrls.length > 0
     const feedPlaceholders = hasFeedFilter ? nextFeedUrls.map(() => "?").join(", ") : ""
@@ -241,7 +251,7 @@ export class NewsRepository {
     const params = hasFeedFilter
       ? [sinceTimestamp ?? null, sinceTimestamp ?? null, ...nextFeedUrls, limit]
       : [sinceTimestamp ?? null, sinceTimestamp ?? null, limit]
-    const rows = this.db.prepare(sql).all(...params) as Array<{
+    const rows = db.prepare(sql).all(...params) as Array<{
       id: string
       feed_url: string
       entry_uid: string
@@ -273,14 +283,15 @@ export class NewsRepository {
 
   markDelivered(feedUrl: string, entryUids: string[], deliveredAt: number) {
     if (entryUids.length === 0) return
-    const insert = this.db.prepare(
+    const db = this.getDb()
+    const insert = db.prepare(
       `
       INSERT OR IGNORE INTO deliveries (id, feed_url, entry_uid, delivered_at)
       VALUES (?, ?, ?, ?)
     `,
     )
 
-    const tx = this.db.transaction(() => {
+    const tx = db.transaction(() => {
       for (const entryUid of entryUids) {
         insert.run(randomUUID(), feedUrl, entryUid, deliveredAt)
       }
@@ -297,6 +308,7 @@ export class NewsRepository {
     includeDelivered: boolean
     feedUrls?: string[]
   }): NewsCountResult {
+    const db = this.getDb()
     const nextFeedUrls = (feedUrls ?? []).filter((url) => url.trim().length > 0)
     const hasFeedFilter = nextFeedUrls.length > 0
     const feedPlaceholders = hasFeedFilter ? nextFeedUrls.map(() => "?").join(", ") : ""
@@ -320,7 +332,7 @@ export class NewsRepository {
       ? [sinceTimestamp, ...nextFeedUrls]
       : [sinceTimestamp]
 
-    const rows = this.db.prepare(sql).all(...params) as Array<{
+    const rows = db.prepare(sql).all(...params) as Array<{
       feed_url: string
       count: number
     }>
@@ -349,6 +361,7 @@ export class NewsRepository {
     status: "read" | "unread"
     feedUrls?: string[]
   }): MarkReadRangeResult {
+    const db = this.getDb()
     const nextFeedUrls = (feedUrls ?? []).filter((url) => url.trim().length > 0)
     const hasFeedFilter = nextFeedUrls.length > 0
     const feedPlaceholders = hasFeedFilter ? nextFeedUrls.map(() => "?").join(", ") : ""
@@ -364,7 +377,7 @@ export class NewsRepository {
 
     const matchedEntries =
       (
-        this.db
+        db
           .prepare(
             `
           SELECT COUNT(*) AS count
@@ -389,7 +402,7 @@ export class NewsRepository {
       const insertParams = hasFeedFilter
         ? [Date.now(), startTimestamp, endTimestamp, ...nextFeedUrls]
         : [Date.now(), startTimestamp, endTimestamp]
-      const res = this.db.prepare(insertSql).run(...insertParams)
+      const res = db.prepare(insertSql).run(...insertParams)
       return {
         matchedEntries,
         changedDeliveries: res.changes,
@@ -411,7 +424,7 @@ export class NewsRepository {
     const deleteParams = hasFeedFilter
       ? [startTimestamp, endTimestamp, ...nextFeedUrls]
       : [startTimestamp, endTimestamp]
-    const res = this.db.prepare(deleteSql).run(...deleteParams)
+    const res = db.prepare(deleteSql).run(...deleteParams)
 
     return {
       matchedEntries,
@@ -420,6 +433,7 @@ export class NewsRepository {
   }
 
   close() {
-    this.db.close()
+    this.db?.close()
+    this.db = null
   }
 }
