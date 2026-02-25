@@ -22,6 +22,16 @@ function createRepo() {
   return new NewsRepository(path.join(dir, "test.sqlite"))
 }
 
+function createRepoWithPath() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rss-mcp-test-"))
+  tmpDirs.push(dir)
+  const dbPath = path.join(dir, "test.sqlite")
+  return {
+    repo: new NewsRepository(dbPath),
+    dbPath,
+  }
+}
+
 function makeEntry(entryUid: string, title: string): NormalizedEntry {
   return {
     id: randomUUID(),
@@ -34,6 +44,17 @@ function makeEntry(entryUid: string, title: string): NormalizedEntry {
 }
 
 describe("NewsRepository", () => {
+  it("creates database lazily on first repository usage", () => {
+    const { repo, dbPath } = createRepoWithPath()
+    expect(fs.existsSync(dbPath)).toBe(false)
+
+    const known = repo.listKnownFeedUrls()
+    expect(known).toEqual([])
+    expect(fs.existsSync(dbPath)).toBe(true)
+
+    repo.close()
+  })
+
   it("deduplicates entries by feed_url + entry_uid", () => {
     const repo = createRepo()
     const feedUrl = "https://example.com/rss.xml"
