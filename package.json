@@ -2,6 +2,7 @@
   "name": "@max1ab/rss-news",
   "version": "0.1.0",
   "description": "MCP server for incremental RSS news fetching with SQLite-backed read state.",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -9,7 +10,8 @@
   },
   "files": [
     "dist/**/*.js",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "prebuild": "rm -rf dist",
