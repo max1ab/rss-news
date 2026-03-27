@@ -140,7 +140,7 @@ Behavior:
 - `status: "read"`: mark matched entries as read (insert into `deliveries`)
 - `status: "unread"`: mark matched entries as unread (delete from `deliveries`)
 
-## Cursor MCP Config Example
+## MCP Config Example
 
 Add this server to your MCP config:
 
@@ -148,20 +148,17 @@ Add this server to your MCP config:
 {
   "mcpServers": {
     "rss-news": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/rss-news/dist/index.js"],
-      "env": {
-        "RSS_MCP_DB_PATH": "/ABSOLUTE/PATH/rss-news/data/rss.sqlite"
-      }
+      "command": "npx",
+      "args": ["-y", "@max1ab/rss-news"]
     }
   }
 }
 ```
 
-Build before using `dist/index.js`:
+If you want to keep the SQLite file in a custom location:
 
 ```bash
-npm run build
+RSS_MCP_DB_PATH=/ABSOLUTE/PATH/rss-news/data/rss.sqlite npx -y @max1ab/rss-news
 ```
 
 ## Incremental Delivery Model
