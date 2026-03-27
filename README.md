@@ -147,11 +147,11 @@ Add this server to your MCP config:
 ```json
 {
   "mcpServers": {
-    "rss-news-mcp": {
+    "rss-news": {
       "command": "node",
-      "args": ["/ABSOLUTE/PATH/rss-news-mcp/dist/index.js"],
+      "args": ["/ABSOLUTE/PATH/rss-news/dist/index.js"],
       "env": {
-        "RSS_MCP_DB_PATH": "/ABSOLUTE/PATH/rss-news-mcp/data/rss.sqlite"
+        "RSS_MCP_DB_PATH": "/ABSOLUTE/PATH/rss-news/data/rss.sqlite"
       }
     }
   }

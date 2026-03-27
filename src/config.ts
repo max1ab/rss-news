@@ -23,7 +23,7 @@ export function loadConfig(): AppConfig {
     maxFeedUrlsPerRequest: Number(process.env.RSS_MCP_MAX_FEEDS_PER_REQUEST || 50),
     userAgent:
       process.env.RSS_MCP_USER_AGENT?.trim() ||
-      "rss-news-mcp/0.1 (+https://localhost; incremental-fetch)",
+      "rss-news/0.1 (+https://localhost; incremental-fetch)",
     debugEnabled: process.env.RSS_MCP_DEBUG === "1" || process.env.RSS_MCP_DEBUG === "true",
     debugResponsePreviewLength: Number(process.env.RSS_MCP_DEBUG_PREVIEW_LENGTH || 300),
   }
