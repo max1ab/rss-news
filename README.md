@@ -9,15 +9,48 @@
                                                                 
 ```
 
-Node.js + TypeScript MCP server for RSS news ingestion with incremental delivery.
+Turn any MCP client into an incremental RSS news reader with one `npx` command.
 
-## Features
+`@max1ab/rss-news` is a Node.js + TypeScript MCP server that pulls RSS/Atom feeds into SQLite, remembers what has already been delivered, and returns a clean global latest-news view instead of repeating the same items on every run.
 
-- Fetch RSS/Atom feeds with conditional requests (`ETag` / `Last-Modified`)
-- Support `rsshub://` protocol with automatic instance fallback
-- Persist feed state and entries in SQLite
-- Return only undelivered items to the agent
-- Deduplicate entries using a stable `entry_uid`
+## Use It With MCP
+
+Add this server to your MCP config:
+
+```json
+{
+  "mcpServers": {
+    "rss-news": {
+      "command": "npx",
+      "args": ["-y", "@max1ab/rss-news"]
+    }
+  }
+}
+```
+
+If you want the SQLite database in a custom location:
+
+```json
+{
+  "mcpServers": {
+    "rss-news": {
+      "command": "npx",
+      "args": ["-y", "@max1ab/rss-news"],
+      "env": {
+        "RSS_MCP_DB_PATH": "/ABSOLUTE/PATH/rss-news/data/rss.sqlite"
+      }
+    }
+  }
+}
+```
+
+## Why It Feels Better
+
+- One package, no local clone required for normal MCP usage
+- Incremental delivery so the agent sees new items instead of repeats
+- Global latest-news ordering across feeds, not per-feed slices
+- Built-in RSSHub fallback for `rsshub://...` sources
+- SQLite-backed state, easy to inspect and portable
 
 ## Quick Start
 
@@ -139,27 +172,6 @@ Behavior:
 
 - `status: "read"`: mark matched entries as read (insert into `deliveries`)
 - `status: "unread"`: mark matched entries as unread (delete from `deliveries`)
-
-## MCP Config Example
-
-Add this server to your MCP config:
-
-```json
-{
-  "mcpServers": {
-    "rss-news": {
-      "command": "npx",
-      "args": ["-y", "@max1ab/rss-news"]
-    }
-  }
-}
-```
-
-If you want to keep the SQLite file in a custom location:
-
-```bash
-RSS_MCP_DB_PATH=/ABSOLUTE/PATH/rss-news/data/rss.sqlite npx -y @max1ab/rss-news
-```
 
 ## Incremental Delivery Model
 
