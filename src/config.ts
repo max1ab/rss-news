@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 export interface AppConfig {
   dbPath: string
   requestTimeoutMs: number
-  defaultLimitPerFeed: number
+  defaultFetchLimit: number
   maxFeedUrlsPerRequest: number
   userAgent: string
   debugEnabled: boolean
@@ -19,7 +19,7 @@ export function loadConfig(): AppConfig {
       process.env.RSS_MCP_DB_PATH?.trim() ||
       path.join(projectRootDir, "data", "rss.sqlite"),
     requestTimeoutMs: Number(process.env.RSS_MCP_REQUEST_TIMEOUT_MS || 15000),
-    defaultLimitPerFeed: Number(process.env.RSS_MCP_DEFAULT_LIMIT_PER_FEED || 20),
+    defaultFetchLimit: Number(process.env.RSS_MCP_DEFAULT_FETCH_LIMIT || 20),
     maxFeedUrlsPerRequest: Number(process.env.RSS_MCP_MAX_FEEDS_PER_REQUEST || 50),
     userAgent:
       process.env.RSS_MCP_USER_AGENT?.trim() ||

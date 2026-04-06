@@ -66,6 +66,31 @@ describe("NewsRepository", () => {
     repo.close()
   })
 
+  it("creates, lists, resolves, and removes subscriptions", () => {
+    const repo = createRepo()
+    const feedUrl = "https://example.com/rss.xml"
+    const anotherFeedUrl = "https://another.example.com/rss.xml"
+
+    const upserted = repo.upsertSubscriptions([
+      { feedUrl, title: "Example", category: "tech" },
+      { feedUrl: anotherFeedUrl, category: "world" },
+    ])
+    expect(upserted.createdCount).toBe(2)
+    expect(upserted.updatedCount).toBe(0)
+
+    const techSubscriptions = repo.listSubscriptions({ category: "tech" })
+    expect(techSubscriptions).toHaveLength(1)
+    expect(techSubscriptions[0]!.feedUrl).toBe(feedUrl)
+
+    const resolvedFeedUrls = repo.resolveSubscribedFeedUrls({ category: "world" })
+    expect(resolvedFeedUrls).toEqual([anotherFeedUrl])
+
+    const removed = repo.removeSubscriptions([anotherFeedUrl], "unsubscribe")
+    expect(removed.removedSubscriptions).toBe(1)
+    expect(repo.resolveSubscribedFeedUrls()).toEqual([feedUrl])
+    repo.close()
+  })
+
   it("returns undelivered entries only once", () => {
     const repo = createRepo()
     const feedUrl = "https://example.com/rss.xml"

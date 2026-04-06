@@ -57,25 +57,37 @@
 
 ## 你的 AI 可以用它做什么
 
-- 拉取 RSS/Atom 内容并写入本地 SQLite
-- 从多个 feed 中整理出一份统一的最新内容列表
-- 自动记录哪些内容已经投递过，减少重复读取
+- 管理 RSS/Atom 订阅列表
+- 拉取订阅源内容并写入本地 SQLite
+- 从多个订阅源中整理出一份统一的最新内容列表
+- 显式消费新闻并记录哪些内容已经处理过
 - 统计最近一段时间的新闻数量，方便做监控或调度
-- 按日期区间批量调整已读或未读状态
+- 按日期区间批量调整已消费或未消费状态
 - 同时支持普通 RSS 地址和 `rsshub://...` 来源
 
 典型使用流程很简单：
 
-1. 先刷新 feed
-2. 再读取最新且尚未投递的内容
-3. 由服务自动记录本次已投递的状态
+1. 先写入订阅源
+2. 再同步订阅内容
+3. 最后读取或消费最新未处理内容
 
-## 增量投递模型
+## 当前 Tools
 
 - 数据库文件会在首次使用时按需创建
+- `subscriptions` 用来存订阅源及抓取状态
 - `entries` 用来存储抓取到的新闻条目，`feed_url + entry_uid` 保持唯一
-- `deliveries` 用来记录哪些条目已经返回给 Agent
-- 默认情况下，只会返回还没进入 `deliveries` 的内容，并在返回后自动标记为已投递
+- `deliveries` 用来记录哪些条目已经被消费
+
+可用 MCP tool：
+
+- `list_subscriptions`
+- `upsert_subscriptions`
+- `remove_subscriptions`
+- `sync_news`
+- `fetch_news`
+- `consume_news`
+- `count_news`
+- `set_consumption_status`
 
 ## 进阶使用
 
@@ -83,7 +95,7 @@
 
 - `RSS_MCP_DB_PATH`：SQLite 路径，默认是 `<project-root>/data/rss.sqlite`
 - `RSS_MCP_REQUEST_TIMEOUT_MS`：抓取超时时间，默认 `15000`
-- `RSS_MCP_DEFAULT_LIMIT_PER_FEED`：每个源的默认返回上限，默认 `20`
+- `RSS_MCP_DEFAULT_FETCH_LIMIT`：默认全局返回上限，默认 `20`
 - `RSS_MCP_MAX_FEEDS_PER_REQUEST`：单次请求允许的最大 feed 数量，默认 `50`
 - `RSS_MCP_USER_AGENT`：自定义请求 User-Agent
 - `RSS_MCP_DEBUG`：设为 `1` 或 `true` 启用调试日志

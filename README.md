@@ -57,25 +57,37 @@ It is built for people who want their AI to:
 
 ## What Your AI Can Do With It
 
-- Refresh RSS and Atom feeds into a local SQLite database
-- Pull the latest items across all feeds in one globally sorted stream
-- Avoid repeated items by remembering what has already been delivered
+- Manage a subscription list for RSS and Atom feeds
+- Sync subscribed feeds into a local SQLite database
+- Fetch the latest items across all subscriptions in one globally sorted stream
+- Consume items explicitly and remember what has already been read
 - Count recent items for monitoring or recurring workflows
-- Reset read state by time range when you want to reprocess a window
+- Reset consumed state by time range when you want to reprocess a window
 - Work with both standard feed URLs and `rsshub://...` sources
 
 In practice, the common flow is simple:
 
-1. Refresh feeds
-2. Ask for the latest undelivered items
-3. Let the server remember what has already been seen
+1. Upsert subscriptions
+2. Sync subscribed feeds
+3. Fetch or consume the latest unread items
 
-## Incremental Delivery Model
+## Current Tools
 
 - Database file is created lazily on first repository usage if it does not exist.
+- `subscriptions`: stores subscribed feeds plus fetch metadata
 - `entries`: stores fetched entries (`feed_url + entry_uid` is unique)
-- `deliveries`: stores which entries were already returned to agent
-- Tool returns only entries not present in `deliveries`, then marks them delivered
+- `deliveries`: stores which entries have already been consumed
+
+Available MCP tools:
+
+- `list_subscriptions`
+- `upsert_subscriptions`
+- `remove_subscriptions`
+- `sync_news`
+- `fetch_news`
+- `consume_news`
+- `count_news`
+- `set_consumption_status`
 
 ## Advanced Setup
 
@@ -83,7 +95,7 @@ In practice, the common flow is simple:
 
 - `RSS_MCP_DB_PATH`: SQLite path (default: `<project-root>/data/rss.sqlite`)
 - `RSS_MCP_REQUEST_TIMEOUT_MS`: fetch timeout in milliseconds (default: `15000`)
-- `RSS_MCP_DEFAULT_LIMIT_PER_FEED`: default return limit per feed (default: `20`)
+- `RSS_MCP_DEFAULT_FETCH_LIMIT`: default global fetch limit (default: `20`)
 - `RSS_MCP_MAX_FEEDS_PER_REQUEST`: max feed count for each call (default: `50`)
 - `RSS_MCP_USER_AGENT`: custom request User-Agent
 - `RSS_MCP_DEBUG`: set `1` or `true` to enable debug logs

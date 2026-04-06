@@ -7,8 +7,14 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { AppConfig } from "../../config.js"
 import { fetchRssFeed } from "../../rss/fetcher.js"
 import { NewsRepository } from "../../store/repository.js"
-import { registerFetchLatestNewsTool } from "./fetchLatestNews.js"
-import { registerUpdateNewsTool } from "./updateNews.js"
+import { registerConsumeNewsTool } from "./consumeNews.js"
+import { registerCountNewsTool } from "./countNews.js"
+import { registerFetchNewsTool } from "./fetchNews.js"
+import { registerListSubscriptionsTool } from "./listSubscriptions.js"
+import { registerRemoveSubscriptionsTool } from "./removeSubscriptions.js"
+import { registerSetConsumptionStatusTool } from "./setConsumptionStatus.js"
+import { registerSyncNewsTool } from "./syncNews.js"
+import { registerUpsertSubscriptionsTool } from "./upsertSubscriptions.js"
 
 vi.mock("../../rss/fetcher.js", () => ({
   fetchRssFeed: vi.fn(),
@@ -37,7 +43,7 @@ function createConfig(): AppConfig {
   return {
     dbPath: ":memory:",
     requestTimeoutMs: 1000,
-    defaultLimitPerFeed: 20,
+    defaultFetchLimit: 20,
     maxFeedUrlsPerRequest: 50,
     userAgent: "test-agent",
     debugEnabled: false,
@@ -61,20 +67,28 @@ function createToolServer() {
   }
 }
 
-describe("MCP tools update_news + fetch_latest_news", () => {
-  it("updates entries first, then fetches and marks delivered", async () => {
+function registerAllTools(serverHarness: ReturnType<typeof createToolServer>, repo: NewsRepository) {
+  const config = createConfig()
+  registerListSubscriptionsTool(serverHarness.server as any, { repository: repo })
+  registerUpsertSubscriptionsTool(serverHarness.server as any, { repository: repo })
+  registerRemoveSubscriptionsTool(serverHarness.server as any, { repository: repo })
+  registerSyncNewsTool(serverHarness.server as any, { repository: repo, config })
+  registerFetchNewsTool(serverHarness.server as any, { repository: repo, config })
+  registerConsumeNewsTool(serverHarness.server as any, { repository: repo, config })
+  registerCountNewsTool(serverHarness.server as any, { repository: repo, config })
+  registerSetConsumptionStatusTool(serverHarness.server as any, { repository: repo, config })
+}
+
+describe("MCP tools", () => {
+  it("manages subscriptions and syncs before fetch/consume", async () => {
     const repo = createRepo()
     const serverHarness = createToolServer()
-    const config = createConfig()
     const feedUrl = "https://example.com/rss.xml"
 
-    registerUpdateNewsTool(serverHarness.server as any, {
-      repository: repo,
-      config,
-    })
-    registerFetchLatestNewsTool(serverHarness.server as any, {
-      repository: repo,
-      config,
+    registerAllTools(serverHarness, repo)
+
+    await serverHarness.getHandler("upsert_subscriptions")({
+      items: [{ feedUrl, title: "Example", category: "tech" }],
     })
 
     vi.mocked(fetchRssFeed).mockResolvedValueOnce({
@@ -104,111 +118,151 @@ describe("MCP tools update_news + fetch_latest_news", () => {
       },
     })
 
-    const updateResult = await serverHarness.getHandler("update_news")({
-      feedUrls: [feedUrl],
-    })
-    const updatePayload = JSON.parse(updateResult.content[0]!.text) as {
+    const syncResult = await serverHarness.getHandler("sync_news")({})
+    const syncPayload = JSON.parse(syncResult.content[0]!.text) as {
       summary: { insertedTotal: number }
-      errors: Array<{ feedUrl: string; message: string }>
-      meta?: unknown
+      results: Array<{ status: string }>
     }
-    expect(updatePayload.meta).toBeUndefined()
-    expect(updatePayload.summary.insertedTotal).toBe(1)
-    expect(updatePayload.errors).toEqual([])
+    expect(syncPayload.summary.insertedTotal).toBe(1)
+    expect(syncPayload.results[0]!.status).toBe("success")
 
-    const firstFetchResult = await serverHarness.getHandler("fetch_latest_news")({
-      feedUrls: [feedUrl],
-      includeDelivered: false,
-      limit: 10,
-    })
-    const firstFetchPayload = JSON.parse(firstFetchResult.content[0]!.text) as {
-      items: Array<{ title: string }>
+    const fetchResult = await serverHarness.getHandler("fetch_news")({})
+    const fetchPayload = JSON.parse(fetchResult.content[0]!.text) as {
+      items: Array<{ title: string; isConsumed: boolean }>
     }
-    expect(firstFetchPayload.items).toHaveLength(1)
-    expect(firstFetchPayload.items[0]!.title).toBe("Test Title")
+    expect(fetchPayload.items).toHaveLength(1)
+    expect(fetchPayload.items[0]!.title).toBe("Test Title")
+    expect(fetchPayload.items[0]!.isConsumed).toBe(false)
 
-    const secondFetchResult = await serverHarness.getHandler("fetch_latest_news")({
-      feedUrls: [feedUrl],
-      includeDelivered: false,
-      limit: 10,
-    })
+    const consumeResult = await serverHarness.getHandler("consume_news")({})
+    const consumePayload = JSON.parse(consumeResult.content[0]!.text) as {
+      items: Array<{ isConsumed: boolean }>
+      consumedCount: number
+    }
+    expect(consumePayload.items).toHaveLength(1)
+    expect(consumePayload.items[0]!.isConsumed).toBe(true)
+    expect(consumePayload.consumedCount).toBe(1)
+
+    const secondFetchResult = await serverHarness.getHandler("fetch_news")({})
     const secondFetchPayload = JSON.parse(secondFetchResult.content[0]!.text) as {
-      items: Array<{ title: string }>
+      items: Array<unknown>
     }
     expect(secondFetchPayload.items).toHaveLength(0)
 
     repo.close()
   })
 
-  it("does not mark as delivered when markAsRead is false", async () => {
+  it("lists, counts, and resets consumption state", async () => {
     const repo = createRepo()
     const serverHarness = createToolServer()
-    const config = createConfig()
     const feedUrl = "https://example.com/rss.xml"
 
-    registerUpdateNewsTool(serverHarness.server as any, {
-      repository: repo,
-      config,
-    })
-    registerFetchLatestNewsTool(serverHarness.server as any, {
-      repository: repo,
-      config,
+    registerAllTools(serverHarness, repo)
+
+    await serverHarness.getHandler("upsert_subscriptions")({
+      items: [{ feedUrl, title: "Example", category: "tech" }],
     })
 
-    vi.mocked(fetchRssFeed).mockResolvedValueOnce({
-      status: "ok",
-      etag: null,
-      lastModified: null,
-      items: [
-        {
-          title: "Keep Unread",
-          link: "https://example.com/news/keep-unread",
-          guid: "news-keep-unread",
-          isoDate: new Date().toISOString(),
-          contentSnippet: "snippet",
-        },
-      ],
-      response: {
-        url: feedUrl,
-        sourceUrl: feedUrl,
-        attemptedUrls: [feedUrl],
-        status: 200,
-        statusText: "OK",
-        contentType: "application/rss+xml",
-        contentLength: "100",
-        etag: null,
-        lastModified: null,
-        responsePreview: null,
+    repo.upsertEntries(feedUrl, [
+      {
+        id: "entry-1",
+        entryUid: "entry-1",
+        title: "Already Stored",
+        link: "https://example.com/news/1",
+        publishedAt: Date.now(),
+        contentSnippet: "stored",
       },
-    })
+    ])
 
-    await serverHarness.getHandler("update_news")({
-      feedUrls: [feedUrl],
+    const listResult = await serverHarness.getHandler("list_subscriptions")({
+      category: "tech",
     })
-
-    const firstFetchResult = await serverHarness.getHandler("fetch_latest_news")({
-      feedUrls: [feedUrl],
-      includeDelivered: false,
-      markAsRead: false,
-      limit: 10,
-    })
-    const firstFetchPayload = JSON.parse(firstFetchResult.content[0]!.text) as {
-      items: Array<{ title: string }>
-      markAsRead: boolean
+    const listPayload = JSON.parse(listResult.content[0]!.text) as {
+      items: Array<{ feedUrl: string }>
     }
-    expect(firstFetchPayload.markAsRead).toBe(false)
-    expect(firstFetchPayload.items).toHaveLength(1)
+    expect(listPayload.items.map((item) => item.feedUrl)).toEqual([feedUrl])
 
-    const secondFetchResult = await serverHarness.getHandler("fetch_latest_news")({
-      feedUrls: [feedUrl],
-      includeDelivered: false,
-      markAsRead: false,
-      limit: 10,
+    const countUnread = await serverHarness.getHandler("count_news")({
+      pastHours: 24,
     })
-    const secondFetchPayload = JSON.parse(secondFetchResult.content[0]!.text) as {
-      items: Array<{ title: string }>
+    const countUnreadPayload = JSON.parse(countUnread.content[0]!.text) as {
+      totalCount: number
     }
-    expect(secondFetchPayload.items).toHaveLength(1)
+    expect(countUnreadPayload.totalCount).toBe(1)
+
+    const today = new Date().toISOString().slice(0, 10)
+    const markConsumed = await serverHarness.getHandler("set_consumption_status")({
+      startDate: today,
+      endDate: today,
+      status: "consumed",
+    })
+    const markConsumedPayload = JSON.parse(markConsumed.content[0]!.text) as {
+      changedDeliveries: number
+    }
+    expect(markConsumedPayload.changedDeliveries).toBe(1)
+
+    const countConsumed = await serverHarness.getHandler("count_news")({
+      pastHours: 24,
+      includeConsumed: true,
+    })
+    const countConsumedPayload = JSON.parse(countConsumed.content[0]!.text) as {
+      totalCount: number
+    }
+    expect(countConsumedPayload.totalCount).toBe(1)
+
+    const markUnconsumed = await serverHarness.getHandler("set_consumption_status")({
+      startDate: today,
+      endDate: today,
+      status: "unconsumed",
+    })
+    const markUnconsumedPayload = JSON.parse(markUnconsumed.content[0]!.text) as {
+      changedDeliveries: number
+    }
+    expect(markUnconsumedPayload.changedDeliveries).toBe(1)
+
+    repo.close()
+  })
+
+  it("removes subscriptions and can purge stored data", async () => {
+    const repo = createRepo()
+    const serverHarness = createToolServer()
+    const feedUrl = "https://example.com/rss.xml"
+
+    registerAllTools(serverHarness, repo)
+
+    await serverHarness.getHandler("upsert_subscriptions")({
+      items: [{ feedUrl }],
+    })
+    repo.upsertEntries(feedUrl, [
+      {
+        id: "entry-1",
+        entryUid: "entry-1",
+        title: "Stored",
+        link: "https://example.com/news/1",
+        publishedAt: Date.now(),
+        contentSnippet: "stored",
+      },
+    ])
+    repo.markDelivered(feedUrl, ["entry-1"], Date.now())
+
+    const removeResult = await serverHarness.getHandler("remove_subscriptions")({
+      feedUrls: [feedUrl],
+      mode: "purge",
+    })
+    const removePayload = JSON.parse(removeResult.content[0]!.text) as {
+      removedSubscriptions: number
+      removedEntries: number
+      removedDeliveries: number
+    }
+    expect(removePayload.removedSubscriptions).toBe(1)
+    expect(removePayload.removedEntries).toBe(1)
+    expect(removePayload.removedDeliveries).toBe(1)
+
+    const listResult = await serverHarness.getHandler("list_subscriptions")({})
+    const listPayload = JSON.parse(listResult.content[0]!.text) as {
+      items: Array<unknown>
+    }
+    expect(listPayload.items).toHaveLength(0)
 
     repo.close()
   })

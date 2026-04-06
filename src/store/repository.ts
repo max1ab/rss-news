@@ -12,6 +12,34 @@ export interface FeedState {
   lastCheckedAt: number | null
 }
 
+export interface SubscriptionRecord extends FeedState {
+  title: string | null
+  category: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface UpsertSubscriptionInput {
+  feedUrl: string
+  title?: string | null
+  category?: string | null
+}
+
+export interface UpsertSubscriptionsResult {
+  createdCount: number
+  updatedCount: number
+  items: Array<{
+    feedUrl: string
+    status: "created" | "updated"
+  }>
+}
+
+export interface RemoveSubscriptionsResult {
+  removedSubscriptions: number
+  removedEntries: number
+  removedDeliveries: number
+}
+
 export interface StoredEntry {
   id: string
   feedUrl: string
@@ -21,6 +49,7 @@ export interface StoredEntry {
   publishedAt: number | null
   contentSnippet: string | null
   firstSeenAt: number
+  isDelivered: boolean
 }
 
 export interface NewsCountResult {
@@ -31,6 +60,17 @@ export interface NewsCountResult {
 export interface MarkReadRangeResult {
   matchedEntries: number
   changedDeliveries: number
+}
+
+type SubscriptionRow = {
+  feed_url: string
+  title: string | null
+  category: string | null
+  etag: string | null
+  last_modified: string | null
+  last_checked_at: number | null
+  created_at: number
+  updated_at: number
 }
 
 export class NewsRepository {
@@ -48,23 +88,205 @@ export class NewsRepository {
     return this.db
   }
 
+  private mapSubscription(row: SubscriptionRow): SubscriptionRecord {
+    return {
+      feedUrl: row.feed_url,
+      title: row.title,
+      category: row.category,
+      etag: row.etag,
+      lastModified: row.last_modified,
+      lastCheckedAt: row.last_checked_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  private normalizeFeedUrls(feedUrls?: string[]) {
+    return [...new Set((feedUrls ?? []).map((url) => url.trim()).filter((url) => url.length > 0))]
+  }
+
+  listSubscriptions(args?: { feedUrls?: string[]; category?: string | null }): SubscriptionRecord[] {
+    const db = this.getDb()
+    const feedUrls = this.normalizeFeedUrls(args?.feedUrls)
+    const hasFeedFilter = feedUrls.length > 0
+    const category = args?.category?.trim() || null
+    const feedClause = hasFeedFilter ? `WHERE feed_url IN (${feedUrls.map(() => "?").join(", ")})` : ""
+    const categoryClause = category
+      ? `${hasFeedFilter ? " AND" : " WHERE"} category = ?`
+      : ""
+    const rows = db
+      .prepare(
+        `
+          SELECT
+            feed_url,
+            title,
+            category,
+            etag,
+            last_modified,
+            last_checked_at,
+            created_at,
+            updated_at
+          FROM subscriptions
+          ${feedClause}
+          ${categoryClause}
+          ORDER BY feed_url
+        `,
+      )
+      .all(...feedUrls, ...(category ? [category] : [])) as SubscriptionRow[]
+
+    return rows.map((row) => this.mapSubscription(row))
+  }
+
+  resolveSubscribedFeedUrls(args?: { feedUrls?: string[]; category?: string | null }): string[] {
+    const requestedFeedUrls = this.normalizeFeedUrls(args?.feedUrls)
+    const subscriptions = this.listSubscriptions({
+      feedUrls: requestedFeedUrls.length > 0 ? requestedFeedUrls : undefined,
+      category: args?.category,
+    })
+    const resolvedFeedUrls = subscriptions.map((item) => item.feedUrl)
+
+    if (requestedFeedUrls.length > 0 && resolvedFeedUrls.length !== requestedFeedUrls.length) {
+      const resolvedSet = new Set(resolvedFeedUrls)
+      const missing = requestedFeedUrls.filter((feedUrl) => !resolvedSet.has(feedUrl))
+      throw new Error(`feedUrls are not subscribed: ${missing.join(", ")}`)
+    }
+
+    return resolvedFeedUrls
+  }
+
+  upsertSubscriptions(items: UpsertSubscriptionInput[]): UpsertSubscriptionsResult {
+    const db = this.getDb()
+    const normalizedItems = [...new Map(
+      items
+        .map((item) => ({
+          feedUrl: item.feedUrl.trim(),
+          title: item.title?.trim() || null,
+          category: item.category?.trim() || null,
+        }))
+        .filter((item) => item.feedUrl.length > 0)
+        .map((item) => [item.feedUrl, item] as const),
+    ).values()]
+
+    if (normalizedItems.length === 0) {
+      return {
+        createdCount: 0,
+        updatedCount: 0,
+        items: [],
+      }
+    }
+
+    const existing = new Set(
+      this.listSubscriptions({ feedUrls: normalizedItems.map((item) => item.feedUrl) }).map(
+        (item) => item.feedUrl,
+      ),
+    )
+
+    const insert = db.prepare(
+      `
+        INSERT INTO subscriptions (
+          feed_url,
+          title,
+          category,
+          etag,
+          last_modified,
+          last_checked_at,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?)
+        ON CONFLICT(feed_url) DO UPDATE SET
+          title = excluded.title,
+          category = excluded.category,
+          updated_at = excluded.updated_at
+      `,
+    )
+
+    const results: UpsertSubscriptionsResult["items"] = []
+    let createdCount = 0
+    let updatedCount = 0
+
+    const tx = db.transaction(() => {
+      const now = Date.now()
+      for (const item of normalizedItems) {
+        const status = existing.has(item.feedUrl) ? "updated" : "created"
+        insert.run(item.feedUrl, item.title, item.category, now, now)
+        results.push({
+          feedUrl: item.feedUrl,
+          status,
+        })
+        if (status === "created") {
+          createdCount += 1
+        } else {
+          updatedCount += 1
+        }
+      }
+    })
+    tx()
+
+    return {
+      createdCount,
+      updatedCount,
+      items: results,
+    }
+  }
+
+  removeSubscriptions(feedUrls: string[], mode: "unsubscribe" | "purge"): RemoveSubscriptionsResult {
+    const db = this.getDb()
+    const normalizedFeedUrls = this.normalizeFeedUrls(feedUrls)
+    if (normalizedFeedUrls.length === 0) {
+      return {
+        removedSubscriptions: 0,
+        removedEntries: 0,
+        removedDeliveries: 0,
+      }
+    }
+
+    const placeholders = normalizedFeedUrls.map(() => "?").join(", ")
+    let removedSubscriptions = 0
+    let removedEntries = 0
+    let removedDeliveries = 0
+
+    const tx = db.transaction(() => {
+      if (mode === "purge") {
+        removedDeliveries = db
+          .prepare(`DELETE FROM deliveries WHERE feed_url IN (${placeholders})`)
+          .run(...normalizedFeedUrls).changes
+        removedEntries = db
+          .prepare(`DELETE FROM entries WHERE feed_url IN (${placeholders})`)
+          .run(...normalizedFeedUrls).changes
+      }
+
+      removedSubscriptions = db
+        .prepare(`DELETE FROM subscriptions WHERE feed_url IN (${placeholders})`)
+        .run(...normalizedFeedUrls).changes
+    })
+    tx()
+
+    return {
+      removedSubscriptions,
+      removedEntries,
+      removedDeliveries,
+    }
+  }
+
   getFeedState(feedUrl: string): FeedState | null {
     const row = this.getDb()
       .prepare(
         `
-        SELECT feed_url, etag, last_modified, last_checked_at
-        FROM subscriptions
-        WHERE feed_url = ?
-      `,
+          SELECT
+            feed_url,
+            etag,
+            last_modified,
+            last_checked_at,
+            title,
+            category,
+            created_at,
+            updated_at
+          FROM subscriptions
+          WHERE feed_url = ?
+        `,
       )
-      .get(feedUrl) as
-      | {
-          feed_url: string
-          etag: string | null
-          last_modified: string | null
-          last_checked_at: number | null
-        }
-      | undefined
+      .get(feedUrl) as SubscriptionRow | undefined
 
     if (!row) return null
 
@@ -87,19 +309,33 @@ export class NewsRepository {
     lastModified: string | null
     lastCheckedAt: number
   }) {
+    const now = Date.now()
     this.getDb()
       .prepare(
         `
-        INSERT INTO subscriptions (feed_url, etag, last_modified, last_checked_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(feed_url) DO UPDATE SET
-          etag = excluded.etag,
-          last_modified = excluded.last_modified,
-          last_checked_at = excluded.last_checked_at,
-          updated_at = excluded.updated_at
-      `,
+          INSERT INTO subscriptions (
+            feed_url,
+            title,
+            category,
+            etag,
+            last_modified,
+            last_checked_at,
+            created_at,
+            updated_at
+          )
+          VALUES (?, NULL, NULL, ?, ?, ?, ?, ?)
+          ON CONFLICT(feed_url) DO UPDATE SET
+            etag = excluded.etag,
+            last_modified = excluded.last_modified,
+            last_checked_at = excluded.last_checked_at,
+            updated_at = excluded.updated_at
+        `,
       )
-      .run(feedUrl, etag, lastModified, lastCheckedAt, lastCheckedAt, lastCheckedAt)
+      .run(feedUrl, etag, lastModified, lastCheckedAt, now, now)
+  }
+
+  listKnownFeedUrls(): string[] {
+    return this.resolveSubscribedFeedUrls()
   }
 
   upsertEntries(feedUrl: string, entries: NormalizedEntry[]) {
@@ -109,10 +345,10 @@ export class NewsRepository {
     const now = Date.now()
     const insert = db.prepare(
       `
-      INSERT OR IGNORE INTO entries
-      (id, feed_url, entry_uid, title, link, published_at, content_snippet, first_seen_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `,
+        INSERT OR IGNORE INTO entries
+        (id, feed_url, entry_uid, title, link, published_at, content_snippet, first_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `,
     )
 
     let inserted = 0
@@ -136,24 +372,6 @@ export class NewsRepository {
     return inserted
   }
 
-  listKnownFeedUrls(): string[] {
-    const rows = this.getDb()
-      .prepare(
-        `
-          SELECT DISTINCT feed_url FROM (
-          SELECT feed_url FROM subscriptions
-          UNION
-          SELECT feed_url FROM entries
-        )
-        WHERE feed_url IS NOT NULL AND feed_url != ''
-        ORDER BY feed_url
-      `,
-      )
-      .all() as Array<{ feed_url: string }>
-
-    return rows.map((row) => row.feed_url)
-  }
-
   listEntries({
     feedUrl,
     limit,
@@ -165,51 +383,12 @@ export class NewsRepository {
     sinceTimestamp?: number
     includeDelivered?: boolean
   }): StoredEntry[] {
-    const undeliveredClause = includeDelivered ? "" : "AND d.entry_uid IS NULL"
-    const rows = this.getDb()
-      .prepare(
-        `
-        SELECT
-          e.id,
-          e.feed_url,
-          e.entry_uid,
-          e.title,
-          e.link,
-          e.published_at,
-          e.content_snippet,
-          e.first_seen_at
-        FROM entries e
-        LEFT JOIN deliveries d
-          ON d.feed_url = e.feed_url
-         AND d.entry_uid = e.entry_uid
-        WHERE e.feed_url = ?
-          ${undeliveredClause}
-          AND (? IS NULL OR COALESCE(e.published_at, e.first_seen_at) >= ?)
-        ORDER BY COALESCE(e.published_at, e.first_seen_at) DESC
-        LIMIT ?
-      `,
-      )
-      .all(feedUrl, sinceTimestamp ?? null, sinceTimestamp ?? null, limit) as Array<{
-      id: string
-      feed_url: string
-      entry_uid: string
-      title: string
-      link: string | null
-      published_at: number | null
-      content_snippet: string | null
-      first_seen_at: number
-    }>
-
-    return rows.map((row) => ({
-      id: row.id,
-      feedUrl: row.feed_url,
-      entryUid: row.entry_uid,
-      title: row.title,
-      link: row.link,
-      publishedAt: row.published_at,
-      contentSnippet: row.content_snippet,
-      firstSeenAt: row.first_seen_at,
-    }))
+    return this.listEntriesAcrossFeeds({
+      feedUrls: [feedUrl],
+      limit,
+      sinceTimestamp,
+      includeDelivered,
+    })
   }
 
   listEntriesAcrossFeeds({
@@ -224,7 +403,7 @@ export class NewsRepository {
     includeDelivered?: boolean
   }): StoredEntry[] {
     const db = this.getDb()
-    const nextFeedUrls = (feedUrls ?? []).filter((url) => url.trim().length > 0)
+    const nextFeedUrls = this.normalizeFeedUrls(feedUrls)
     const hasFeedFilter = nextFeedUrls.length > 0
     const feedPlaceholders = hasFeedFilter ? nextFeedUrls.map(() => "?").join(", ") : ""
     const whereFeedClause = hasFeedFilter ? `AND e.feed_url IN (${feedPlaceholders})` : ""
@@ -238,7 +417,8 @@ export class NewsRepository {
         e.link,
         e.published_at,
         e.content_snippet,
-        e.first_seen_at
+        e.first_seen_at,
+        CASE WHEN d.entry_uid IS NULL THEN 0 ELSE 1 END AS is_delivered
       FROM entries e
       LEFT JOIN deliveries d
         ON d.feed_url = e.feed_url
@@ -261,6 +441,7 @@ export class NewsRepository {
       published_at: number | null
       content_snippet: string | null
       first_seen_at: number
+      is_delivered: number
     }>
 
     return rows.map((row) => ({
@@ -272,6 +453,7 @@ export class NewsRepository {
       publishedAt: row.published_at,
       contentSnippet: row.content_snippet,
       firstSeenAt: row.first_seen_at,
+      isDelivered: row.is_delivered === 1,
     }))
   }
 
@@ -283,21 +465,24 @@ export class NewsRepository {
   }
 
   markDelivered(feedUrl: string, entryUids: string[], deliveredAt: number) {
-    if (entryUids.length === 0) return
+    if (entryUids.length === 0) return 0
     const db = this.getDb()
     const insert = db.prepare(
       `
-      INSERT OR IGNORE INTO deliveries (id, feed_url, entry_uid, delivered_at)
-      VALUES (?, ?, ?, ?)
-    `,
+        INSERT OR IGNORE INTO deliveries (id, feed_url, entry_uid, delivered_at)
+        VALUES (?, ?, ?, ?)
+      `,
     )
 
+    let inserted = 0
     const tx = db.transaction(() => {
       for (const entryUid of entryUids) {
-        insert.run(randomUUID(), feedUrl, entryUid, deliveredAt)
+        inserted += insert.run(randomUUID(), feedUrl, entryUid, deliveredAt).changes
       }
     })
     tx()
+
+    return inserted
   }
 
   countNewsSince({
@@ -310,30 +495,27 @@ export class NewsRepository {
     feedUrls?: string[]
   }): NewsCountResult {
     const db = this.getDb()
-    const nextFeedUrls = (feedUrls ?? []).filter((url) => url.trim().length > 0)
+    const nextFeedUrls = this.normalizeFeedUrls(feedUrls)
     const hasFeedFilter = nextFeedUrls.length > 0
     const feedPlaceholders = hasFeedFilter ? nextFeedUrls.map(() => "?").join(", ") : ""
-
     const whereFeedClause = hasFeedFilter ? `AND e.feed_url IN (${feedPlaceholders})` : ""
     const undeliveredClause = includeDelivered ? "" : "AND d.entry_uid IS NULL"
 
-    const sql = `
-      SELECT e.feed_url AS feed_url, COUNT(*) AS count
-      FROM entries e
-      LEFT JOIN deliveries d
-        ON d.feed_url = e.feed_url
-       AND d.entry_uid = e.entry_uid
-      WHERE COALESCE(e.published_at, e.first_seen_at) >= ?
-        ${whereFeedClause}
-        ${undeliveredClause}
-      GROUP BY e.feed_url
-    `
-
-    const params = hasFeedFilter
-      ? [sinceTimestamp, ...nextFeedUrls]
-      : [sinceTimestamp]
-
-    const rows = db.prepare(sql).all(...params) as Array<{
+    const rows = db
+      .prepare(
+        `
+          SELECT e.feed_url AS feed_url, COUNT(*) AS count
+          FROM entries e
+          LEFT JOIN deliveries d
+            ON d.feed_url = e.feed_url
+           AND d.entry_uid = e.entry_uid
+          WHERE COALESCE(e.published_at, e.first_seen_at) >= ?
+            ${whereFeedClause}
+            ${undeliveredClause}
+          GROUP BY e.feed_url
+        `,
+      )
+      .all(sinceTimestamp, ...nextFeedUrls) as Array<{
       feed_url: string
       count: number
     }>
@@ -363,7 +545,7 @@ export class NewsRepository {
     feedUrls?: string[]
   }): MarkReadRangeResult {
     const db = this.getDb()
-    const nextFeedUrls = (feedUrls ?? []).filter((url) => url.trim().length > 0)
+    const nextFeedUrls = this.normalizeFeedUrls(feedUrls)
     const hasFeedFilter = nextFeedUrls.length > 0
     const feedPlaceholders = hasFeedFilter ? nextFeedUrls.map(() => "?").join(", ") : ""
     const feedClause = hasFeedFilter ? `AND e.feed_url IN (${feedPlaceholders})` : ""
@@ -381,10 +563,10 @@ export class NewsRepository {
         db
           .prepare(
             `
-          SELECT COUNT(*) AS count
-          FROM entries e
-          ${whereSql}
-        `,
+              SELECT COUNT(*) AS count
+              FROM entries e
+              ${whereSql}
+            `,
           )
           .get(...params) as { count: number } | undefined
       )?.count ?? 0

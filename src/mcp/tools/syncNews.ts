@@ -5,27 +5,28 @@ import type { AppConfig } from "../../config.js"
 import { fetchRssFeed } from "../../rss/fetcher.js"
 import { normalizeFeedItems } from "../../rss/normalize.js"
 import type { NewsRepository } from "../../store/repository.js"
+import { resolveToolFeedUrls } from "./shared.js"
 
-const updateNewsInput = z.object({
+const syncNewsInput = z.object({
   feedUrls: z.array(z.string().url()).max(500).optional(),
 })
 
-type FeedUpdateResult = {
+type FeedSyncResult = {
   feedUrl: string
+  status: "success" | "not_modified" | "error"
   fetched: number
   inserted: number
-  skipped304: boolean
-  error?: string
+  message?: string
 }
 
-export function registerUpdateNewsTool(server: McpServer, deps: {
+export function registerSyncNewsTool(server: McpServer, deps: {
   repository: NewsRepository
   config: AppConfig
 }) {
   server.tool(
-    "update_news",
-    "Fetch RSS feeds and update entries in storage.",
-    updateNewsInput.shape,
+    "sync_news",
+    "Fetch subscribed RSS feeds and update stored entries.",
+    syncNewsInput.shape,
     async (input) => {
       const debugLog = (event: string, detail?: unknown) => {
         if (!deps.config.debugEnabled) return
@@ -35,15 +36,14 @@ export function registerUpdateNewsTool(server: McpServer, deps: {
         )
       }
 
-      const requestedFeedUrls = input.feedUrls ?? deps.repository.listKnownFeedUrls()
-      if (requestedFeedUrls.length > deps.config.maxFeedUrlsPerRequest) {
-        throw new Error(
-          `feedUrls exceed configured max: ${deps.config.maxFeedUrlsPerRequest}`,
-        )
-      }
+      const resolvedFeedUrls = resolveToolFeedUrls({
+        repository: deps.repository,
+        config: deps.config,
+        feedUrls: input.feedUrls,
+      })
 
-      const perFeedResults = await Promise.all(
-        requestedFeedUrls.map(async (feedUrl): Promise<FeedUpdateResult> => {
+      const results = await Promise.all(
+        resolvedFeedUrls.map(async (feedUrl): Promise<FeedSyncResult> => {
           const now = Date.now()
           try {
             const previousState = deps.repository.getFeedState(feedUrl)
@@ -71,9 +71,9 @@ export function registerUpdateNewsTool(server: McpServer, deps: {
             if (result.status === "not_modified") {
               return {
                 feedUrl,
+                status: "not_modified",
                 fetched: 0,
                 inserted: 0,
-                skipped304: true,
               }
             }
 
@@ -81,30 +81,30 @@ export function registerUpdateNewsTool(server: McpServer, deps: {
             const inserted = deps.repository.upsertEntries(feedUrl, normalizedEntries)
             return {
               feedUrl,
+              status: "success",
               fetched: normalizedEntries.length,
               inserted,
-              skipped304: false,
             }
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
             debugLog("rss.feed.error", { feedUrl, error: message })
             return {
               feedUrl,
+              status: "error",
               fetched: 0,
               inserted: 0,
-              skipped304: false,
-              error: message,
+              message,
             }
           }
         }),
       )
 
-      const summary = perFeedResults.reduce(
+      const summary = results.reduce(
         (acc, item) => {
           acc.fetchedTotal += item.fetched
           acc.insertedTotal += item.inserted
-          if (item.skipped304) acc.skipped304Feeds += 1
-          if (item.error) {
+          if (item.status === "not_modified") acc.skipped304Feeds += 1
+          if (item.status === "error") {
             acc.errorFeeds += 1
           } else {
             acc.successFeeds += 1
@@ -112,7 +112,7 @@ export function registerUpdateNewsTool(server: McpServer, deps: {
           return acc
         },
         {
-          feedsTotal: requestedFeedUrls.length,
+          feedsTotal: resolvedFeedUrls.length,
           successFeeds: 0,
           errorFeeds: 0,
           fetchedTotal: 0,
@@ -121,23 +121,15 @@ export function registerUpdateNewsTool(server: McpServer, deps: {
         },
       )
 
-      const errors = perFeedResults
-        .filter((item) => typeof item.error === "string")
-        .map((item) => ({
-          feedUrl: item.feedUrl,
-          message: item.error as string,
-        }))
-
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify(
               {
-                ok: true,
-                resolvedFeedUrls: requestedFeedUrls,
+                resolvedFeedUrls,
                 summary,
-                errors,
+                results,
                 updatedAt: new Date().toISOString(),
               },
               null,
