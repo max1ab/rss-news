@@ -11,6 +11,7 @@ import { registerConsumeNewsTool } from "./consumeNews.js"
 import { registerCountNewsTool } from "./countNews.js"
 import { registerFetchNewsTool } from "./fetchNews.js"
 import { registerListSubscriptionsTool } from "./listSubscriptions.js"
+import { registerPreviewFeedTool } from "./previewFeed.js"
 import { registerRemoveSubscriptionsTool } from "./removeSubscriptions.js"
 import { registerSetConsumptionStatusTool } from "./setConsumptionStatus.js"
 import { registerSyncNewsTool } from "./syncNews.js"
@@ -76,6 +77,7 @@ function registerAllTools(serverHarness: ReturnType<typeof createToolServer>, re
   registerListSubscriptionsTool(serverHarness.server as any, { repository: repo })
   registerUpsertSubscriptionsTool(serverHarness.server as any, { repository: repo })
   registerRemoveSubscriptionsTool(serverHarness.server as any, { repository: repo })
+  registerPreviewFeedTool(serverHarness.server as any, { config })
   registerSyncNewsTool(serverHarness.server as any, { repository: repo, config })
   registerFetchNewsTool(serverHarness.server as any, { repository: repo, config })
   registerConsumeNewsTool(serverHarness.server as any, { repository: repo, config })
@@ -84,6 +86,100 @@ function registerAllTools(serverHarness: ReturnType<typeof createToolServer>, re
 }
 
 describe("MCP tools", () => {
+  it("previews multiple feed urls without storing subscriptions", async () => {
+    const repo = createRepo()
+    const serverHarness = createToolServer()
+    const rsshubInputUrl = "https://rsshub.app/dcfever/reviews/cameras"
+    const rsshubCanonicalUrl = "rsshub://dcfever/reviews/cameras"
+    const normalFeedUrl = "https://example.com/rss.xml"
+
+    registerAllTools(serverHarness, repo)
+
+    vi.mocked(fetchRssFeed)
+      .mockResolvedValueOnce({
+        status: "ok",
+        etag: null,
+        lastModified: null,
+        items: [
+          {
+            title: "Camera Review",
+            link: "https://example.com/camera-review",
+            guid: "camera-review",
+            isoDate: new Date().toISOString(),
+            contentSnippet: "preview snippet",
+          },
+        ],
+        response: {
+          url: rsshubCanonicalUrl,
+          sourceUrl: rsshubCanonicalUrl,
+          attemptedUrls: [rsshubCanonicalUrl],
+          status: 200,
+          statusText: "OK",
+          contentType: "application/rss+xml",
+          contentLength: "100",
+          etag: null,
+          lastModified: null,
+          responsePreview: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        status: "ok",
+        etag: null,
+        lastModified: null,
+        items: [
+          {
+            title: "Normal Feed Item",
+            link: "https://example.com/news/1",
+            guid: "normal-1",
+            isoDate: new Date().toISOString(),
+            contentSnippet: "normal snippet",
+          },
+        ],
+        response: {
+          url: normalFeedUrl,
+          sourceUrl: normalFeedUrl,
+          attemptedUrls: [normalFeedUrl],
+          status: 200,
+          statusText: "OK",
+          contentType: "application/rss+xml",
+          contentLength: "100",
+          etag: null,
+          lastModified: null,
+          responsePreview: null,
+        },
+      })
+
+    const previewResult = await serverHarness.getHandler("preview_feed")({
+      feedUrls: [rsshubInputUrl, normalFeedUrl],
+      limit: 3,
+    })
+    const previewPayload = JSON.parse(previewResult.content[0]!.text) as {
+      limit: number
+      results: Array<{
+        inputFeedUrl: string
+        feedUrl: string
+        ok: boolean
+        items: Array<{ title: string }>
+      }>
+    }
+
+    expect(previewPayload.limit).toBe(3)
+    expect(previewPayload.results).toHaveLength(2)
+    expect(previewPayload.results[0]).toMatchObject({
+      inputFeedUrl: rsshubInputUrl,
+      feedUrl: rsshubCanonicalUrl,
+      ok: true,
+    })
+    expect(previewPayload.results[1]).toMatchObject({
+      inputFeedUrl: normalFeedUrl,
+      feedUrl: normalFeedUrl,
+      ok: true,
+    })
+    expect(repo.listSubscriptions()).toHaveLength(0)
+
+    repo.close()
+  })
+
   it("manages subscriptions and syncs before fetch/consume", async () => {
     const repo = createRepo()
     const serverHarness = createToolServer()

@@ -83,6 +83,8 @@ Available MCP tools:
 - `list_subscriptions`
 - `upsert_subscriptions`
 - `remove_subscriptions`
+- `preview_feed`
+  Preview a new feed URL before subscribing, to confirm it can be fetched and the content is suitable.
 - `sync_news`
 - `fetch_news`
 - `consume_news`

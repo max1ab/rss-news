@@ -19,7 +19,7 @@ export function registerFetchNewsTool(server: McpServer, deps: {
 }) {
   server.tool(
     "fetch_news",
-    "Read the latest news from local storage without changing read state.",
+    "Read the latest news from local storage without changing read state. Unsubscribed feedUrls are not allowed.",
     fetchNewsInput.shape,
     async (input) => {
       const resolvedFeedUrls = resolveToolFeedUrls({

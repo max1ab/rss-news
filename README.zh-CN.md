@@ -83,6 +83,8 @@
 - `list_subscriptions`
 - `upsert_subscriptions`
 - `remove_subscriptions`
+- `preview_feed`
+  在正式订阅前预览一个或多个 feed URL，确认它们可抓取且内容符合预期。
 - `sync_news`
 - `fetch_news`
 - `consume_news`

@@ -6,6 +6,7 @@ import { registerConsumeNewsTool } from "./tools/consumeNews.js"
 import { registerCountNewsTool } from "./tools/countNews.js"
 import { registerFetchNewsTool } from "./tools/fetchNews.js"
 import { registerListSubscriptionsTool } from "./tools/listSubscriptions.js"
+import { registerPreviewFeedTool } from "./tools/previewFeed.js"
 import { registerRemoveSubscriptionsTool } from "./tools/removeSubscriptions.js"
 import { registerSetConsumptionStatusTool } from "./tools/setConsumptionStatus.js"
 import { registerSyncNewsTool } from "./tools/syncNews.js"
@@ -22,6 +23,7 @@ export function createServer(config: AppConfig) {
   registerListSubscriptionsTool(server, { repository })
   registerUpsertSubscriptionsTool(server, { repository })
   registerRemoveSubscriptionsTool(server, { repository })
+  registerPreviewFeedTool(server, { config })
   registerSyncNewsTool(server, { repository, config })
   registerFetchNewsTool(server, { repository, config })
   registerConsumeNewsTool(server, { repository, config })
