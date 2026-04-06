@@ -93,7 +93,7 @@
 
 ### 环境变量
 
-- `RSS_MCP_DB_PATH`：SQLite 路径，默认是 `<project-root>/data/rss.sqlite`
+- `RSS_MCP_DB_PATH`：SQLite 路径，Windows 默认是 `%APPDATA%/rss-news/rss.sqlite`，其他平台默认是 `~/.local/share/rss-news/rss.sqlite`
 - `RSS_MCP_REQUEST_TIMEOUT_MS`：抓取超时时间，默认 `15000`
 - `RSS_MCP_DEFAULT_FETCH_LIMIT`：默认全局返回上限，默认 `20`
 - `RSS_MCP_MAX_FEEDS_PER_REQUEST`：单次请求允许的最大 feed 数量，默认 `50`

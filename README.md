@@ -93,7 +93,7 @@ Available MCP tools:
 
 ### Environment Variables
 
-- `RSS_MCP_DB_PATH`: SQLite path (default: `<project-root>/data/rss.sqlite`)
+- `RSS_MCP_DB_PATH`: SQLite path (default: `%APPDATA%/rss-news/rss.sqlite` on Windows, `~/.local/share/rss-news/rss.sqlite` on other platforms)
 - `RSS_MCP_REQUEST_TIMEOUT_MS`: fetch timeout in milliseconds (default: `15000`)
 - `RSS_MCP_DEFAULT_FETCH_LIMIT`: default global fetch limit (default: `20`)
 - `RSS_MCP_MAX_FEEDS_PER_REQUEST`: max feed count for each call (default: `50`)

@@ -1,5 +1,5 @@
+import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 
 export interface AppConfig {
   dbPath: string
@@ -11,13 +11,20 @@ export interface AppConfig {
   debugResponsePreviewLength: number
 }
 
+function getDefaultDbPath() {
+  const home = os.homedir()
+
+  if (process.platform === "win32") {
+    const appData = process.env.APPDATA?.trim() || path.join(home, "AppData", "Roaming")
+    return path.join(appData, "rss-news", "rss.sqlite")
+  }
+
+  return path.join(home, ".local", "share", "rss-news", "rss.sqlite")
+}
+
 export function loadConfig(): AppConfig {
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url))
-  const projectRootDir = path.resolve(moduleDir, "..")
   return {
-    dbPath:
-      process.env.RSS_MCP_DB_PATH?.trim() ||
-      path.join(projectRootDir, "data", "rss.sqlite"),
+    dbPath: process.env.RSS_MCP_DB_PATH?.trim() || getDefaultDbPath(),
     requestTimeoutMs: Number(process.env.RSS_MCP_REQUEST_TIMEOUT_MS || 15000),
     defaultFetchLimit: Number(process.env.RSS_MCP_DEFAULT_FETCH_LIMIT || 20),
     maxFeedUrlsPerRequest: Number(process.env.RSS_MCP_MAX_FEEDS_PER_REQUEST || 50),
