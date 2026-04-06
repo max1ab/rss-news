@@ -16,11 +16,15 @@ export function createDatabase(dbPath: string) {
   db.pragma("foreign_keys = ON")
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS feeds (
+    CREATE TABLE IF NOT EXISTS subscriptions (
       feed_url TEXT PRIMARY KEY,
+      title TEXT,
+      category TEXT,
       etag TEXT,
       last_modified TEXT,
-      last_checked_at INTEGER NOT NULL
+      last_checked_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS entries (
@@ -45,6 +49,8 @@ export function createDatabase(dbPath: string) {
 
     CREATE INDEX IF NOT EXISTS idx_entries_feed_time
       ON entries(feed_url, published_at DESC, first_seen_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_category
+      ON subscriptions(category);
     CREATE INDEX IF NOT EXISTS idx_deliveries_feed_url
       ON deliveries(feed_url);
   `)

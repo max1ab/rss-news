@@ -9,7 +9,7 @@ export interface FeedState {
   feedUrl: string
   etag: string | null
   lastModified: string | null
-  lastCheckedAt: number
+  lastCheckedAt: number | null
 }
 
 export interface StoredEntry {
@@ -53,7 +53,7 @@ export class NewsRepository {
       .prepare(
         `
         SELECT feed_url, etag, last_modified, last_checked_at
-        FROM feeds
+        FROM subscriptions
         WHERE feed_url = ?
       `,
       )
@@ -62,7 +62,7 @@ export class NewsRepository {
           feed_url: string
           etag: string | null
           last_modified: string | null
-          last_checked_at: number
+          last_checked_at: number | null
         }
       | undefined
 
@@ -90,15 +90,16 @@ export class NewsRepository {
     this.getDb()
       .prepare(
         `
-        INSERT INTO feeds (feed_url, etag, last_modified, last_checked_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO subscriptions (feed_url, etag, last_modified, last_checked_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(feed_url) DO UPDATE SET
           etag = excluded.etag,
           last_modified = excluded.last_modified,
-          last_checked_at = excluded.last_checked_at
+          last_checked_at = excluded.last_checked_at,
+          updated_at = excluded.updated_at
       `,
       )
-      .run(feedUrl, etag, lastModified, lastCheckedAt)
+      .run(feedUrl, etag, lastModified, lastCheckedAt, lastCheckedAt, lastCheckedAt)
   }
 
   upsertEntries(feedUrl: string, entries: NormalizedEntry[]) {
@@ -139,8 +140,8 @@ export class NewsRepository {
     const rows = this.getDb()
       .prepare(
         `
-        SELECT DISTINCT feed_url FROM (
-          SELECT feed_url FROM feeds
+          SELECT DISTINCT feed_url FROM (
+          SELECT feed_url FROM subscriptions
           UNION
           SELECT feed_url FROM entries
         )
