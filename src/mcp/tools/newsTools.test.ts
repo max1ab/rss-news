@@ -16,9 +16,13 @@ import { registerSetConsumptionStatusTool } from "./setConsumptionStatus.js"
 import { registerSyncNewsTool } from "./syncNews.js"
 import { registerUpsertSubscriptionsTool } from "./upsertSubscriptions.js"
 
-vi.mock("../../rss/fetcher.js", () => ({
-  fetchRssFeed: vi.fn(),
-}))
+vi.mock("../../rss/fetcher.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../rss/fetcher.js")>()
+  return {
+    ...actual,
+    fetchRssFeed: vi.fn(),
+  }
+})
 
 type ToolHandler = (input: unknown) => Promise<{
   content: Array<{ type: string; text: string }>
@@ -148,6 +152,47 @@ describe("MCP tools", () => {
       items: Array<unknown>
     }
     expect(secondFetchPayload.items).toHaveLength(0)
+
+    repo.close()
+  })
+
+  it("returns canonical rsshub feedUrl and requires canonical value for removal", async () => {
+    const repo = createRepo()
+    const serverHarness = createToolServer()
+    const inputFeedUrl = "https://rsshub.app/dcfever/reviews/cameras"
+    const canonicalFeedUrl = "rsshub://dcfever/reviews/cameras"
+
+    registerAllTools(serverHarness, repo)
+
+    const upsertResult = await serverHarness.getHandler("upsert_subscriptions")({
+      items: [{ feedUrl: inputFeedUrl, category: "tech" }],
+    })
+    const upsertPayload = JSON.parse(upsertResult.content[0]!.text) as {
+      items: Array<{ inputFeedUrl: string; feedUrl: string; status: string }>
+    }
+    expect(upsertPayload.items).toEqual([
+      {
+        inputFeedUrl,
+        feedUrl: canonicalFeedUrl,
+        status: "created",
+      },
+    ])
+
+    const removeByOriginalResult = await serverHarness.getHandler("remove_subscriptions")({
+      feedUrls: [inputFeedUrl],
+    })
+    const removeByOriginalPayload = JSON.parse(removeByOriginalResult.content[0]!.text) as {
+      removedSubscriptions: number
+    }
+    expect(removeByOriginalPayload.removedSubscriptions).toBe(0)
+
+    const removeByCanonicalResult = await serverHarness.getHandler("remove_subscriptions")({
+      feedUrls: [canonicalFeedUrl],
+    })
+    const removeByCanonicalPayload = JSON.parse(removeByCanonicalResult.content[0]!.text) as {
+      removedSubscriptions: number
+    }
+    expect(removeByCanonicalPayload.removedSubscriptions).toBe(1)
 
     repo.close()
   })

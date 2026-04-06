@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type Database from "better-sqlite3"
 
+import { normalizeRssHubUrl } from "../rss/fetcher.js"
 import type { NormalizedEntry } from "../rss/normalize.js"
 import { createDatabase } from "./sqlite.js"
 
@@ -29,6 +30,7 @@ export interface UpsertSubscriptionsResult {
   createdCount: number
   updatedCount: number
   items: Array<{
+    inputFeedUrl: string
     feedUrl: string
     status: "created" | "updated"
   }>
@@ -102,7 +104,11 @@ export class NewsRepository {
   }
 
   private normalizeFeedUrls(feedUrls?: string[]) {
-    return [...new Set((feedUrls ?? []).map((url) => url.trim()).filter((url) => url.length > 0))]
+    return [...new Set(
+      (feedUrls ?? [])
+        .map((url) => url.trim())
+        .filter((url) => url.length > 0),
+    )]
   }
 
   listSubscriptions(args?: { feedUrls?: string[]; category?: string | null }): SubscriptionRecord[] {
@@ -159,7 +165,8 @@ export class NewsRepository {
     const normalizedItems = [...new Map(
       items
         .map((item) => ({
-          feedUrl: item.feedUrl.trim(),
+          inputFeedUrl: item.feedUrl.trim(),
+          feedUrl: normalizeRssHubUrl(item.feedUrl.trim()),
           title: item.title?.trim() || null,
           category: item.category?.trim() || null,
         }))
@@ -211,6 +218,7 @@ export class NewsRepository {
         const status = existing.has(item.feedUrl) ? "updated" : "created"
         insert.run(item.feedUrl, item.title, item.category, now, now)
         results.push({
+          inputFeedUrl: item.inputFeedUrl,
           feedUrl: item.feedUrl,
           status,
         })
@@ -232,7 +240,7 @@ export class NewsRepository {
 
   removeSubscriptions(feedUrls: string[], mode: "unsubscribe" | "purge"): RemoveSubscriptionsResult {
     const db = this.getDb()
-    const normalizedFeedUrls = this.normalizeFeedUrls(feedUrls)
+    const normalizedFeedUrls = [...new Set(feedUrls.map((url) => url.trim()).filter((url) => url.length > 0))]
     if (normalizedFeedUrls.length === 0) {
       return {
         removedSubscriptions: 0,

@@ -91,6 +91,19 @@ describe("NewsRepository", () => {
     repo.close()
   })
 
+  it("normalizes known rsshub instance urls when saving subscriptions", () => {
+    const repo = createRepo()
+
+    repo.upsertSubscriptions([
+      { feedUrl: "https://rsshub.app/dcfever/reviews/cameras", category: "tech" },
+    ])
+
+    const subscriptions = repo.listSubscriptions()
+    expect(subscriptions).toHaveLength(1)
+    expect(subscriptions[0]!.feedUrl).toBe("rsshub://dcfever/reviews/cameras")
+    repo.close()
+  })
+
   it("returns undelivered entries only once", () => {
     const repo = createRepo()
     const feedUrl = "https://example.com/rss.xml"

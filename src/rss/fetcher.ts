@@ -24,14 +24,43 @@ const RSSHUB_FALLBACK_BASES = [
   "https://rsshub.aierliz.xyz",
 ] as const
 
-export function expandRssHubUrls(feedUrl: string) {
-  if (!feedUrl.startsWith(RSSHUB_PROTOCOL)) {
-    return [feedUrl]
+const RSSHUB_FALLBACK_ORIGINS = new Set(
+  RSSHUB_FALLBACK_BASES.map((base) => new URL(base).origin.toLowerCase()),
+)
+
+export function normalizeRssHubUrl(feedUrl: string) {
+  if (feedUrl.startsWith(RSSHUB_PROTOCOL)) {
+    return feedUrl
   }
 
-  const route = feedUrl.slice(RSSHUB_PROTOCOL.length).replace(/^\/+/, "")
+  let url: URL
+  try {
+    url = new URL(feedUrl)
+  } catch {
+    return feedUrl
+  }
+
+  if (!RSSHUB_FALLBACK_ORIGINS.has(url.origin.toLowerCase())) {
+    return feedUrl
+  }
+
+  const route = `${url.pathname}${url.search}`.replace(/^\/+/, "")
   if (!route) {
-    throw new Error(`Invalid rsshub url: ${feedUrl}`)
+    return feedUrl
+  }
+
+  return `${RSSHUB_PROTOCOL}${route}`
+}
+
+export function expandRssHubUrls(feedUrl: string) {
+  const normalizedFeedUrl = normalizeRssHubUrl(feedUrl)
+  if (!normalizedFeedUrl.startsWith(RSSHUB_PROTOCOL)) {
+    return [normalizedFeedUrl]
+  }
+
+  const route = normalizedFeedUrl.slice(RSSHUB_PROTOCOL.length).replace(/^\/+/, "")
+  if (!route) {
+    throw new Error(`Invalid rsshub url: ${normalizedFeedUrl}`)
   }
 
   return RSSHUB_FALLBACK_BASES.map((base) => `${base}/${route}`)
