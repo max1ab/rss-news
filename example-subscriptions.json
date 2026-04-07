@@ -1,0 +1,57 @@
+[
+  {
+    "feedUrl": "rsshub://twitter/user/AnthropicAI",
+    "title": "AnthropicAI on X",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "https://openai.com/news/rss.xml",
+    "title": "OpenAI News",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "rsshub://github/trending/daily/any",
+    "title": "GitHub Trending Daily",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "rsshub://twitter/user/sama",
+    "title": "Sam Altman on X",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "https://magazine.sebastianraschka.com/feed",
+    "title": "Ahead of AI",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "https://lastweekin.ai/feed",
+    "title": "Last Week in AI",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "rsshub://nature/research/nature",
+    "title": "Nature Research",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "rsshub://huggingface/daily-papers",
+    "title": "Hugging Face Daily Papers",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "rsshub://hackernews",
+    "title": "Hacker News",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "rsshub://deeplearning/the-batch",
+    "title": "The Batch",
+    "category": "Recommend"
+  },
+  {
+    "feedUrl": "https://github.blog/feed/",
+    "title": "GitHub Blog",
+    "category": "Recommend"
+  }
+]

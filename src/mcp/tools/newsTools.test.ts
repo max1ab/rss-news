@@ -175,7 +175,15 @@ describe("MCP tools", () => {
       feedUrl: normalFeedUrl,
       ok: true,
     })
-    expect(repo.listSubscriptions()).toHaveLength(0)
+    expect(repo.listSubscriptions()).toContainEqual(
+      expect.objectContaining({ feedUrl: "https://openai.com/news/rss.xml" }),
+    )
+    expect(repo.listSubscriptions()).not.toContainEqual(
+      expect.objectContaining({ feedUrl: rsshubCanonicalUrl }),
+    )
+    expect(repo.listSubscriptions()).not.toContainEqual(
+      expect.objectContaining({ feedUrl: normalFeedUrl }),
+    )
 
     repo.close()
   })
@@ -401,9 +409,10 @@ describe("MCP tools", () => {
 
     const listResult = await serverHarness.getHandler("list_subscriptions")({})
     const listPayload = JSON.parse(listResult.content[0]!.text) as {
-      items: Array<unknown>
+      items: Array<{ feedUrl: string }>
     }
-    expect(listPayload.items).toHaveLength(0)
+    expect(listPayload.items.map((item) => item.feedUrl)).not.toContain(feedUrl)
+    expect(listPayload.items.length).toBeGreaterThan(0)
 
     repo.close()
   })

@@ -10,6 +10,7 @@
   },
   "files": [
     "dist/**/*.js",
+    "example-subscriptions.json",
     "README.md",
     "LICENSE"
   ],

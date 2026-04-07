@@ -44,12 +44,13 @@ function makeEntry(entryUid: string, title: string): NormalizedEntry {
 }
 
 describe("NewsRepository", () => {
-  it("creates database lazily on first repository usage", () => {
+  it("creates database lazily and seeds default subscriptions on first repository usage", () => {
     const { repo, dbPath } = createRepoWithPath()
     expect(fs.existsSync(dbPath)).toBe(false)
 
     const known = repo.listKnownFeedUrls()
-    expect(known).toEqual([])
+    expect(known).toContain("https://openai.com/news/rss.xml")
+    expect(known).toContain("rsshub://hackernews")
     expect(fs.existsSync(dbPath)).toBe(true)
 
     repo.close()
@@ -87,7 +88,8 @@ describe("NewsRepository", () => {
 
     const removed = repo.removeSubscriptions([anotherFeedUrl], "unsubscribe")
     expect(removed.removedSubscriptions).toBe(1)
-    expect(repo.resolveSubscribedFeedUrls()).toEqual([feedUrl])
+    expect(repo.resolveSubscribedFeedUrls()).toContain(feedUrl)
+    expect(repo.resolveSubscribedFeedUrls()).not.toContain(anotherFeedUrl)
     repo.close()
   })
 
@@ -98,7 +100,9 @@ describe("NewsRepository", () => {
       { feedUrl: "https://rsshub.app/dcfever/reviews/cameras", category: "tech" },
     ])
 
-    const subscriptions = repo.listSubscriptions()
+    const subscriptions = repo.listSubscriptions({
+      feedUrls: ["rsshub://dcfever/reviews/cameras"],
+    })
     expect(subscriptions).toHaveLength(1)
     expect(subscriptions[0]!.feedUrl).toBe("rsshub://dcfever/reviews/cameras")
     repo.close()
