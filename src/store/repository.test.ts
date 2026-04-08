@@ -108,7 +108,7 @@ describe("NewsRepository", () => {
     repo.close()
   })
 
-  it("returns undelivered entries only once", () => {
+  it("returns unconsumed entries only once", () => {
     const repo = createRepo()
     const feedUrl = "https://example.com/rss.xml"
 
@@ -134,7 +134,7 @@ describe("NewsRepository", () => {
     repo.close()
   })
 
-  it("counts undelivered and all news by time window", () => {
+  it("counts unconsumed and all news by time window", () => {
     const repo = createRepo()
     const feedUrl = "https://example.com/rss.xml"
     const anotherFeedUrl = "https://another.example.com/rss.xml"
@@ -146,13 +146,13 @@ describe("NewsRepository", () => {
 
     const sinceTimestamp = Date.now() - 60 * 60 * 1000
 
-    const undelivered = repo.countNewsSince({
+    const unconsumed = repo.countNewsSince({
       sinceTimestamp,
       includeDelivered: false,
     })
-    expect(undelivered.total).toBe(2)
-    expect(undelivered.byFeed[feedUrl]).toBe(1)
-    expect(undelivered.byFeed[anotherFeedUrl]).toBe(1)
+    expect(unconsumed.total).toBe(2)
+    expect(unconsumed.byFeed[feedUrl]).toBe(1)
+    expect(unconsumed.byFeed[anotherFeedUrl]).toBe(1)
 
     const all = repo.countNewsSince({
       sinceTimestamp,
@@ -164,7 +164,7 @@ describe("NewsRepository", () => {
     repo.close()
   })
 
-  it("lists known feed urls and supports includeDelivered in listEntries", () => {
+  it("lists subscribed feed urls and supports includeDelivered in listEntries", () => {
     const repo = createRepo()
     const feedUrl = "https://example.com/rss.xml"
 
@@ -180,12 +180,12 @@ describe("NewsRepository", () => {
     const known = repo.listKnownFeedUrls()
     expect(known).toContain(feedUrl)
 
-    const undelivered = repo.listEntries({
+    const unconsumed = repo.listEntries({
       feedUrl,
       limit: 10,
       includeDelivered: false,
     })
-    expect(undelivered).toHaveLength(1)
+    expect(unconsumed).toHaveLength(1)
 
     const allEntries = repo.listEntries({
       feedUrl,
@@ -196,7 +196,7 @@ describe("NewsRepository", () => {
     repo.close()
   })
 
-  it("sets read/unread status by time range", () => {
+  it("sets consumed or unconsumed status by time range", () => {
     const repo = createRepo()
     const feedUrl = "https://example.com/rss.xml"
 
@@ -206,37 +206,37 @@ describe("NewsRepository", () => {
 
     repo.upsertEntries(feedUrl, [makeEntry("a", "A"), makeEntry("b", "B"), makeEntry("c", "C")])
 
-    const markRead = repo.setReadStatusByTimeRange({
+    const markConsumed = repo.setReadStatusByTimeRange({
       startTimestamp: dayStart,
       endTimestamp: dayEnd,
       status: "read",
       feedUrls: [feedUrl],
     })
-    expect(markRead.matchedEntries).toBe(3)
-    expect(markRead.changedDeliveries).toBe(3)
+    expect(markConsumed.matchedEntries).toBe(3)
+    expect(markConsumed.changedDeliveries).toBe(3)
 
-    const undeliveredAfterRead = repo.listEntries({
+    const unconsumedAfterConsumed = repo.listEntries({
       feedUrl,
       limit: 10,
       includeDelivered: false,
     })
-    expect(undeliveredAfterRead).toHaveLength(0)
+    expect(unconsumedAfterConsumed).toHaveLength(0)
 
-    const markUnread = repo.setReadStatusByTimeRange({
+    const markUnconsumed = repo.setReadStatusByTimeRange({
       startTimestamp: dayStart,
       endTimestamp: dayEnd,
       status: "unread",
       feedUrls: [feedUrl],
     })
-    expect(markUnread.matchedEntries).toBe(3)
-    expect(markUnread.changedDeliveries).toBe(3)
+    expect(markUnconsumed.matchedEntries).toBe(3)
+    expect(markUnconsumed.changedDeliveries).toBe(3)
 
-    const undeliveredAfterUnread = repo.listEntries({
+    const unconsumedAfterReset = repo.listEntries({
       feedUrl,
       limit: 10,
       includeDelivered: false,
     })
-    expect(undeliveredAfterUnread).toHaveLength(3)
+    expect(unconsumedAfterReset).toHaveLength(3)
     repo.close()
   })
 
