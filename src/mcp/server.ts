@@ -15,7 +15,7 @@ import { registerUpsertSubscriptionsTool } from "./tools/upsertSubscriptions.js"
 export function createServer(config: AppConfig) {
   const server = new McpServer({
     name: "rss-news",
-    version: "0.1.0",
+    version: "1.0.0",
   })
 
   const repository = new NewsRepository(config.dbPath)
