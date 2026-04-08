@@ -27,7 +27,7 @@ Add this server to your MCP config:
 }
 ```
 
-## Examples
+### Examples
 
 You can directly say things like this to an AI that supports MCP:
 
@@ -37,7 +37,7 @@ You can directly say things like this to an AI that supports MCP:
 4. Help me search for some AI-related RSS sources, preview the content quality, and subscribe to the good ones.
 5. Help me count how many unread news items appeared in the past 24 hours, grouped by source.
 
-## Features
+### Features
 
 - Manage subscriptions
 - Sync the latest news
