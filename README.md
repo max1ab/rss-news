@@ -7,8 +7,8 @@
                                                                 
 ```
 
-[![npm-@max1ab/rss-news](https://img.shields.io/badge/npm-%40max1ab%2Frss--news-CB3837)](https://www.npmjs.com/package/@max1ab/rss-news)
 [![lang-中文](https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-blue)](./README.zh-CN.md)
+[![npm-@max1ab/rss-news](https://img.shields.io/badge/npm-%40max1ab%2Frss--news-CB3837)](https://www.npmjs.com/package/@max1ab/rss-news)
 
 Cut through noise and clickbait. With one `npx` command, your AI can connect to and process first-hand news sources.
 
@@ -46,7 +46,7 @@ You can directly say things like this to an AI that supports MCP:
 - Count news
 - Reset state
 
-- Seed example subscriptions from `example-subscriptions.json` when a new database is created
+Seed example subscriptions from `example-subscriptions.json` when a new database is created
 
 ## Advanced Setup
 
