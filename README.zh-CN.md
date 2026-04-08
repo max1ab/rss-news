@@ -1,7 +1,3 @@
-# RSS News MCP
-
-[![lang-English](https://img.shields.io/badge/lang-English-blue)](./README.md)
-
 ```text
  ____  ____ ____    _   _                     __  __  ____ ____  
 |  _ \/ ___/ ___|  | \ | | _____      _____  |  \/  |/ ___|  _ \ 
@@ -11,9 +7,12 @@
                                                                 
 ```
 
+[![npm-@max1ab/rss-news](https://img.shields.io/badge/npm-%40max1ab%2Frss--news-CB3837)](https://www.npmjs.com/package/@max1ab/rss-news)
+[![lang-English](https://img.shields.io/badge/lang-English-blue)](./README.md)
+
 告别信息焦虑，远离标题党；只需一个 `npx` 命令，就能让你的 AI 接入并处理一手新闻来源。
 
-## 在 MCP 中使用
+## 安装 MCP
 
 把下面的配置加入你的 MCP 配置文件：
 
@@ -46,6 +45,8 @@
 - 消费新闻
 - 统计
 - 重置状态
+
+- 首次创建数据库时自动导入 `example-subscriptions.json` 中的示例订阅源
 
 ## 进阶使用
 
