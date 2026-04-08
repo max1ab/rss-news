@@ -14,14 +14,19 @@
 
 ## 安装 MCP
 
+命令行安装:
+
+```bash
+npm i -g @max1ab/rss-news
+```
+
 把下面的配置加入你的 MCP 配置文件：
 
 ```json
 {
   "mcpServers": {
     "rss-news": {
-      "command": "npx",
-      "args": ["-y", "@max1ab/rss-news"]
+      "command": "rss-news"
     }
   }
 }

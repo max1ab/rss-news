@@ -14,14 +14,19 @@ Cut through noise and clickbait. With one `npx` command, your AI can connect to 
 
 ## Install MCP
 
+npm package install:
+
+```bash
+npm i -g @max1ab/rss-news
+```
+
 Add this server to your MCP config:
 
 ```json
 {
   "mcpServers": {
     "rss-news": {
-      "command": "npx",
-      "args": ["-y", "@max1ab/rss-news"]
+      "command": "rss-news"
     }
   }
 }
