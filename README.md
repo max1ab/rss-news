@@ -1,6 +1,6 @@
 # RSS News MCP
 
-[中文说明](./README.zh-CN.md)
+[![lang-中文](https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-blue)](./README.zh-CN.md)
 
 ```text
  ____  ____ ____    _   _                     __  __  ____ ____  
@@ -28,68 +28,24 @@ Add this server to your MCP config:
 }
 ```
 
-If you want the SQLite database in a custom location:
+## Examples
 
-```json
-{
-  "mcpServers": {
-    "rss-news": {
-      "command": "npx",
-      "args": ["-y", "@max1ab/rss-news"],
-      "env": {
-        "RSS_MCP_DB_PATH": "/ABSOLUTE/PATH/rss-news/data/rss.sqlite"
-      }
-    }
-  }
-}
-```
+You can directly say things like this to an AI that supports MCP:
 
-## Why Use It
+1. Help me review the past 24 hours of news, summarize the important items, and organize the summary into Notion.
+2. Help me check unread news, pick the most important items, and send a message to my phone.
+3. Help me follow the latest OpenAI news. If I am not subscribed yet, add suitable subscriptions first.
+4. Help me search for some AI-related RSS sources, preview the content quality, and subscribe to the good ones.
+5. Help me count how many unread news items appeared in the past 24 hours, grouped by source.
 
-Most AI workflows still depend on search results, summaries of summaries, or noisy feeds with repeated items. `@max1ab/rss-news` gives your MCP client a steadier input layer: direct RSS/Atom sources, incremental delivery, and a persistent memory of what has already been seen.
+## Features
 
-It is built for people who want their AI to:
-
-- track real news sources instead of recycled headlines
-- follow multiple feeds without manually deduplicating results
-- pull only fresh items on each run
-- keep a portable local history in SQLite
-
-## What Your AI Can Do With It
-
-- Manage a subscription list for RSS and Atom feeds
-- Sync subscribed feeds into a local SQLite database
-- Fetch the latest items across all subscriptions in one globally sorted stream
-- Consume items explicitly and remember what has already been read
-- Count recent items for monitoring or recurring workflows
-- Reset consumed state by time range when you want to reprocess a window
-- Work with both standard feed URLs and `rsshub://...` sources
-
-In practice, the common flow is simple:
-
-1. Upsert subscriptions
-2. Sync subscribed feeds
-3. Fetch or consume the latest unread items
-
-## Current Tools
-
-- Database file is created lazily on first repository usage if it does not exist.
-- `subscriptions`: stores subscribed feeds plus fetch metadata
-- `entries`: stores fetched entries (`feed_url + entry_uid` is unique)
-- `deliveries`: stores which entries have already been consumed
-
-Available MCP tools:
-
-- `list_subscriptions`
-- `upsert_subscriptions`
-- `remove_subscriptions`
-- `preview_feed`
-  Preview a new feed URL before subscribing, to confirm it can be fetched and the content is suitable.
-- `sync_news`
-- `fetch_news`
-- `consume_news`
-- `count_news`
-- `set_consumption_status`
+- Manage subscriptions
+- Sync the latest news
+- Fetch unread news
+- Consume news
+- Count news
+- Reset state
 
 ## Advanced Setup
 
@@ -122,3 +78,23 @@ Run tests:
 ```bash
 npm test
 ```
+
+### Current Tools
+
+- Database file is created lazily on first repository usage if it does not exist.
+- `subscriptions`: stores subscribed feeds plus fetch metadata
+- `entries`: stores fetched entries (`feed_url + entry_uid` is unique)
+- `deliveries`: stores which entries have already been consumed
+
+Available MCP tools:
+
+- `list_subscriptions`
+- `upsert_subscriptions`
+- `remove_subscriptions`
+- `preview_feed`
+  Preview one or more feed URLs before subscribing, to confirm they can be fetched and the content is suitable.
+- `sync_news`
+- `fetch_news`
+- `consume_news`
+- `count_news`
+- `set_consumption_status`
